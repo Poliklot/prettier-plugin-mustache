@@ -1,0 +1,60 @@
+{
+  "name": "prettier-plugin-mustache",
+  "version": "0.1.0",
+  "description": "Prettier plugin for Mustache templates.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./dist/plugin.js",
+  "types": "./dist/plugin.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/plugin.d.ts",
+      "require": "./dist/plugin.js",
+      "default": "./dist/plugin.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Poliklot/prettier-plugin-mustache.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Poliklot/prettier-plugin-mustache/issues"
+  },
+  "homepage": "https://github.com/Poliklot/prettier-plugin-mustache#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "prettier",
+    "prettier-plugin",
+    "mustache",
+    "template",
+    "formatter"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run build && npm test",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "template-format-core": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "prettier": ">=3.0.0"
+  }
+}
