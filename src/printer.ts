@@ -29,7 +29,7 @@ export const printer: Printer<Node> = {
 };
 
 function formatProgram(program: Program): string {
-  const output = formatNodes(program.body).trim();
+  const output = formatNodes(program.body).trimEnd();
   return output.length > 0 ? `${output}\n` : '';
 }
 
@@ -88,7 +88,13 @@ function printDelimiter(node: DelimiterStatement): string {
 function printSection(node: SectionStatement): string {
   const openTag = printSectionOpen(node);
   const closeTag = `${node.closeOpen}/${node.path}${node.closeClose}`;
-  const body = formatNodes(node.body).trim();
+  const rawBody = formatNodes(node.body);
+
+  if (node.inline && !rawBody.includes('\n')) {
+    return `${openTag}${rawBody}${closeTag}`;
+  }
+
+  const body = rawBody.trim();
 
   if (body.length === 0) {
     return `${openTag}\n${closeTag}`;

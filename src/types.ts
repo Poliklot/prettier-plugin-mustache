@@ -64,6 +64,7 @@ export interface SectionStatement extends SourceRange {
   params: string[];
   hash: Array<{ key: string; value: string }>;
   body: Node[];
+  inline: boolean;
   open: string;
   close: string;
   closeOpen: string;

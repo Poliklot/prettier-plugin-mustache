@@ -8,14 +8,22 @@ test('parses Mustache sections and children', () => {
   assert.equal(ast.body[0].type, 'SectionStatement');
   assert.equal(ast.body[0].kind, 'section');
   assert.equal(ast.body[0].path, 'items');
+  assert.equal(ast.body[0].inline, true);
   assert.equal(ast.body[0].body[0].type, 'MustacheStatement');
   assert.equal(ast.body[0].body[0].path, 'name');
 });
 
-test('parses Mustache parents, blocks, and delimiter changes', () => {
-  const ast = parse('{{< layout}}{{$title}}Hi{{/title}}{{/layout}}{{=<% %>=}}<%name%>');
+test('marks multiline sections separately from inline sections', () => {
+  const ast = parse('{{#items}}\n{{name}}\n{{/items}}');
+  assert.equal(ast.body[0].type, 'SectionStatement');
+  assert.equal(ast.body[0].inline, false);
+});
+
+test('parses Mustache parents, blocks, dynamic names, and delimiter changes', () => {
+  const ast = parse('{{<*dynamic}}{{$title}}Hi{{/title}}{{/*dynamic}}{{=<% %>=}}<%name%>');
   assert.equal(ast.body[0].type, 'SectionStatement');
   assert.equal(ast.body[0].kind, 'parent');
+  assert.equal(ast.body[0].path, '*dynamic');
   assert.equal(ast.body[0].body[0].type, 'SectionStatement');
   assert.equal(ast.body[0].body[0].kind, 'block');
   assert.equal(ast.body[1].type, 'DelimiterStatement');

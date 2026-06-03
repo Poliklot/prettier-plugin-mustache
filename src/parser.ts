@@ -98,7 +98,8 @@ function parseNodes(text: string, position: number, delimiters: Delimiters, endN
         continue;
       }
 
-      nodes.push(createSection(token, childResult.nodes, childResult.closeToken));
+      const rawBody = text.slice(token.end, childResult.closeToken?.start ?? childResult.position);
+      nodes.push(createSection(token, childResult.nodes, childResult.closeToken, !rawBody.includes('\n')));
       pos = childResult.position;
       continue;
     }
@@ -260,13 +261,14 @@ function createDelimiter(token: Token): DelimiterStatement {
   );
 }
 
-function createSection(token: Token, body: Node[], closeToken?: Token): SectionStatement {
+function createSection(token: Token, body: Node[], closeToken: Token | undefined, inline: boolean): SectionStatement {
   return withRange(
     {
       type: 'SectionStatement',
       kind: token.sectionKind ?? 'section',
       ...createExpression(token.content),
       body,
+      inline,
       open: token.open,
       close: token.close,
       closeOpen: closeToken?.open ?? token.open,
