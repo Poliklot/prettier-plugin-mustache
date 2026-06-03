@@ -31,3 +31,10 @@ test('parses Mustache parents, blocks, dynamic names, and delimiter changes', ()
   assert.equal(ast.body[2].open, '<%');
   assert.equal(ast.body[2].close, '%>');
 });
+
+
+test('parses section names with Mustache punctuation', () => {
+  const ast = parse('{{#person?}}Hi {{name}}{{/person?}}');
+  assert.equal(ast.body[0].type, 'SectionStatement');
+  assert.equal(ast.body[0].path, 'person?');
+});

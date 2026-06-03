@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - 2026-06-03
+
+- Added `.mst` and `.mu` file extensions for parser inference in editors and Prettier CLI usage.
+- Respected Prettier `tabWidth` and `useTabs` when indenting multiline sections, parents, and blocks.
+- Added coverage for standalone comments, partials, delimiter tags, delimiter changes inside multiline sections, and Mustache keys with punctuation such as `person?`.
+- Documented supported file extensions and Prettier indentation behavior.
+
 ## 0.1.1 - 2026-06-03
 
 - Expanded README with install/configuration examples, syntax coverage, formatting behavior, scope, and development notes.

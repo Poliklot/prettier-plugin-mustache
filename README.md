@@ -5,7 +5,7 @@
 
 Prettier plugin for Mustache templates.
 
-It formats `.mustache` files with a focus on stable, idempotent output and Mustache syntax rather than Handlebars, Ember, or Glimmer extensions.
+It formats `.mustache`, `.mst`, and `.mu` files with a focus on stable, idempotent output and Mustache syntax rather than Handlebars, Ember, or Glimmer extensions.
 
 ## Install
 
@@ -23,7 +23,7 @@ module.exports = {
   plugins: ["prettier-plugin-mustache"],
   overrides: [
     {
-      files: ["*.mustache"],
+      files: ["*.mustache", "*.mst", "*.mu"],
       options: {
         parser: "mustache",
       },
@@ -35,7 +35,7 @@ module.exports = {
 Then format templates:
 
 ```bash
-npx prettier --write "**/*.mustache"
+npx prettier --write "**/*.{mustache,mst,mu}"
 ```
 
 ## Configuration Patterns
@@ -57,7 +57,7 @@ Use this when a repository contains several template languages and you want edit
   "plugins": ["prettier-plugin-mustache"],
   "overrides": [
     {
-      "files": ["*.mustache"],
+      "files": ["*.mustache", "*.mst", "*.mu"],
       "options": {
         "parser": "mustache"
       }
@@ -74,7 +74,7 @@ module.exports = {
   plugins: ["../prettier-plugin-mustache/dist/plugin.js"],
   overrides: [
     {
-      files: ["*.mustache"],
+      files: ["*.mustache", "*.mst", "*.mu"],
       options: {
         parser: "mustache",
       },
@@ -88,13 +88,13 @@ module.exports = {
 Published package:
 
 ```bash
-npx prettier --write "src/**/*.mustache" --plugin prettier-plugin-mustache --parser mustache
+npx prettier --write "src/**/*.{mustache,mst,mu}" --plugin prettier-plugin-mustache --parser mustache
 ```
 
 Local plugin build:
 
 ```bash
-npx prettier --write "src/**/*.mustache" --plugin ../prettier-plugin-mustache/dist/plugin.js --parser mustache
+npx prettier --write "src/**/*.{mustache,mst,mu}" --plugin ../prettier-plugin-mustache/dist/plugin.js --parser mustache
 ```
 
 ## API
@@ -111,6 +111,12 @@ async function run(source) {
   });
 }
 ```
+
+## Supported File Extensions
+
+- `.mustache`
+- `.mst`
+- `.mu`
 
 ## What The Plugin Handles Today
 
@@ -134,6 +140,7 @@ async function run(source) {
 | Blocks/inheritance extension | `{{$title}}...{{/title}}` | Formatted |
 | Parent templates | `{{< layout}}...{{/layout}}` | Formatted |
 | Dynamic parent names | `{{<*layout}}...{{/*layout}}` | Formatted |
+| Standalone comments / partials / delimiter tags | `{{! comment}}`, `{{> user}}`, `{{=<% %>=}}` | Formatted in multiline sections |
 | Broken/unmatched tags | `{{#items}}...` | Preserved raw instead of throwing |
 
 ## Formatting Behavior
@@ -180,6 +187,26 @@ formats as:
 {{/items}}
 ```
 
+### Prettier indentation options
+
+Multiline sections respect normal Prettier indentation options such as `tabWidth` and `useTabs`.
+
+With `tabWidth: 4`:
+
+```mustache
+{{#items}}
+    <li>{{ name }}</li>
+{{/items}}
+```
+
+With `useTabs: true`:
+
+```mustache
+{{#items}}
+	<li>{{ name }}</li>
+{{/items}}
+```
+
 ### Inheritance extension
 
 ```mustache
@@ -211,6 +238,7 @@ formats as:
 ## Scope And Non-Goals
 
 - This is a Mustache formatter, not a Mustache renderer.
+- The plugin normalizes Mustache syntax and section indentation; it does not parse embedded HTML/CSS/JS as separate languages yet.
 - Lambda behavior, partial loading, recursive partial expansion, HTML escaping, and context lookup are runtime renderer responsibilities.
 - This package does not claim Handlebars compatibility. Use [`@poliklot/prettier-plugin-handlebars`](https://www.npmjs.com/package/@poliklot/prettier-plugin-handlebars) for classic Handlebars templates.
 - This package does not claim Ember/Glimmer compatibility.

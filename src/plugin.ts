@@ -7,8 +7,8 @@ export const languages: SupportLanguage[] = [
   {
     name: 'Mustache',
     parsers: ['mustache'],
-    extensions: ['.mustache'],
-    aliases: ['mustache', 'mst'],
+    extensions: ['.mustache', '.mst', '.mu'],
+    aliases: ['mustache', 'mst', 'mu'],
     vscodeLanguageIds: ['mustache'],
   },
 ];

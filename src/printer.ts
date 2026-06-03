@@ -9,38 +9,50 @@ import type {
   SectionStatement,
 } from './types';
 
+interface PrintContext {
+  indentation: string;
+}
+
 export const printer: Printer<Node> = {
-  print(path: AstPath<Node>, _options: ParserOptions<Node>): Doc {
+  print(path: AstPath<Node>, options: ParserOptions<Node>): Doc {
     const node = path.getValue();
 
     if (!node) {
       return '';
     }
 
+    const context = createPrintContext(options);
+
     if (node.type === 'Program') {
-      return formatProgram(node);
+      return formatProgram(node, context);
     }
 
-    return printNode(node);
+    return printNode(node, context);
   },
   getVisitorKeys() {
     return [];
   },
 };
 
-function formatProgram(program: Program): string {
-  const output = formatNodes(program.body).trimEnd();
+function createPrintContext(options: ParserOptions<Node>): PrintContext {
+  return {
+    indentation: options.useTabs ? '\t' : ' '.repeat(options.tabWidth ?? 2),
+  };
+}
+
+function formatProgram(program: Program, context: PrintContext): string {
+  const output = formatNodes(program.body, context).trimEnd();
   return output.length > 0 ? `${output}\n` : '';
 }
 
-function formatNodes(nodes: Node[]): string {
-  return nodes.map(printNode).join('');
+function formatNodes(nodes: Node[], context: PrintContext): string {
+  return nodes.map((node) => printNode(node, context)).join('');
 }
 
-function printNode(node: Node): string {
+function printNode(node: Node, context: PrintContext): string {
   switch (node.type) {
     case 'Program':
-      return formatProgram(node);
+      return formatProgram(node, context);
     case 'TextNode':
       return node.value;
     case 'MustacheStatement':
@@ -52,7 +64,7 @@ function printNode(node: Node): string {
     case 'DelimiterStatement':
       return printDelimiter(node);
     case 'SectionStatement':
-      return printSection(node);
+      return printSection(node, context);
     case 'UnmatchedNode':
       return node.raw;
   }
@@ -85,10 +97,10 @@ function printDelimiter(node: DelimiterStatement): string {
   return `${node.open}= ${node.nextOpen} ${node.nextClose} =${node.close}`;
 }
 
-function printSection(node: SectionStatement): string {
+function printSection(node: SectionStatement, context: PrintContext): string {
   const openTag = printSectionOpen(node);
   const closeTag = `${node.closeOpen}/${node.path}${node.closeClose}`;
-  const rawBody = formatNodes(node.body);
+  const rawBody = formatSectionBodyNodes(node.body, context);
 
   if (node.inline && !rawBody.includes('\n')) {
     return `${openTag}${rawBody}${closeTag}`;
@@ -100,7 +112,19 @@ function printSection(node: SectionStatement): string {
     return `${openTag}\n${closeTag}`;
   }
 
-  return `${openTag}\n${indent(body)}\n${closeTag}`;
+  return `${openTag}\n${indent(body, context)}\n${closeTag}`;
+}
+
+function formatSectionBodyNodes(nodes: Node[], context: PrintContext): string {
+  return nodes
+    .map((node) => {
+      if (node.type === 'TextNode' && /^\s*$/.test(node.value) && node.value.includes('\n')) {
+        return node.value.replace(/[^\n]+/g, '');
+      }
+
+      return printNode(node, context);
+    })
+    .join('');
 }
 
 function printSectionOpen(node: SectionStatement): string {
@@ -123,9 +147,9 @@ function buildExpression(node: Pick<MustacheStatement | PartialStatement | Secti
   return parts.join(' ');
 }
 
-function indent(value: string): string {
+function indent(value: string, context: PrintContext): string {
   return value
     .split('\n')
-    .map((line) => (line.length > 0 ? `  ${line}` : line))
+    .map((line) => (line.length > 0 ? `${context.indentation}${line}` : line))
     .join('\n');
 }

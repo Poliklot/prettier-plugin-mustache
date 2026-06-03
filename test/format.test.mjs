@@ -4,12 +4,57 @@ import prettier from 'prettier';
 
 const plugin = await import('../dist/plugin.js');
 
-async function format(source) {
+async function format(source, options = {}) {
   return prettier.format(source, {
     parser: 'mustache',
     plugins: [plugin],
+    ...options,
   });
 }
+
+async function formatByFilepath(source, filepath) {
+  return prettier.format(source, {
+    filepath,
+    plugins: [plugin],
+  });
+}
+
+test('infers parser for common Mustache file extensions', async () => {
+  assert.equal(await formatByFilepath('{{name}}', 'view.mustache'), '{{ name }}\n');
+  assert.equal(await formatByFilepath('{{name}}', 'view.mst'), '{{ name }}\n');
+  assert.equal(await formatByFilepath('{{name}}', 'view.mu'), '{{ name }}\n');
+});
+
+test('respects tabWidth and useTabs for multiline section indentation', async () => {
+  assert.equal(
+    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { tabWidth: 4 }),
+    '{{#items}}\n    <li>{{ name }}</li>\n{{/items}}\n',
+  );
+
+  assert.equal(
+    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { useTabs: true }),
+    '{{#items}}\n\t<li>{{ name }}</li>\n{{/items}}\n',
+  );
+});
+
+test('formats standalone comments, partials, and delimiter tags inside sections', async () => {
+  assert.equal(
+    await format('{{#names}}\n{{! comment}}\n{{> user}}\n{{/names}}', { tabWidth: 4 }),
+    '{{#names}}\n    {{! comment }}\n    {{> user }}\n{{/names}}\n',
+  );
+
+  assert.equal(
+    await format('{{#section}}\n{{=<% %>=}}\n<%name%>\n<%/section%>'),
+    '{{#section}}\n  {{= <% %> =}}\n  <% name %>\n<%/section%>\n',
+  );
+});
+
+test('formats section keys that use Mustache-valid punctuation', async () => {
+  assert.equal(
+    await format('{{#person?}}\nHi {{name}}!\n{{/person?}}'),
+    '{{#person?}}\n  Hi {{ name }}!\n{{/person?}}\n',
+  );
+});
 
 test('formats interpolation, dotted names, implicit iterators, and unescaped variables', async () => {
   assert.equal(
@@ -89,6 +134,8 @@ test('is idempotent for representative templates', async () => {
     '{{< layout}}\n{{$title}}Hi{{/title}}\n{{/layout}}',
     '{{=<% %>=}}Hello <%name%> <%={{ }}=%> {{again}}',
     '{{>*partial}} {{<*layout}}{{$body}}{{.}}{{/body}}{{/*layout}}',
+    '{{#names}}\n{{! comment}}\n{{> user}}\n{{/names}}',
+    '{{#person?}}\nHi {{name}}!\n{{/person?}}',
   ];
 
   for (const sample of samples) {
