@@ -249,6 +249,13 @@ formats as:
 npm install
 npm run check
 npm run pack:check
+npm run smoke:install
+npm run corpus:check -- /path/to/templates
+npm run corpus:oss
 ```
 
-CI runs the same checks on Node 18, 20, and 22.
+`npm run check` builds the plugin, runs unit/semantic/real-world-pattern tests, and runs deterministic fuzz coverage.
+
+`npm run corpus:oss` clones and checks large public Mustache template corpora from Mustache.js, OpenAPI Generator, and Swagger Codegen. See [OSS corpus notes](docs/OSS_CORPUS.md).
+
+CI runs build, tests, fuzz, pack validation, and install smoke checks on Node 18, 20, and 22.

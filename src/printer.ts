@@ -89,8 +89,16 @@ function printPartial(node: PartialStatement): string {
 }
 
 function printComment(node: CommentStatement): string {
-  const value = node.value.trim();
+  const value = normalizeCommentValue(node.value);
   return value.length > 0 ? `${node.open}! ${value} ${node.close}` : `${node.open}!${node.close}`;
+}
+
+function normalizeCommentValue(value: string): string {
+  const lines = value.trim().split('\n');
+
+  return lines
+    .map((line, index) => (index === 0 ? line.trim() : line.trimStart().replace(/[ \t]+$/g, '')))
+    .join('\n');
 }
 
 function printDelimiter(node: DelimiterStatement): string {
@@ -118,8 +126,9 @@ function printSection(node: SectionStatement, context: PrintContext): string {
 function formatSectionBodyNodes(nodes: Node[], context: PrintContext): string {
   return nodes
     .map((node) => {
-      if (node.type === 'TextNode' && /^\s*$/.test(node.value) && node.value.includes('\n')) {
-        return node.value.replace(/[^\n]+/g, '');
+      if (node.type === 'TextNode' && node.value.includes('\n')) {
+        const normalized = node.value.replace(/\n[ \t]+/g, '\n');
+        return /^\s*$/.test(normalized) ? normalized.replace(/[^\n]+/g, '') : normalized;
       }
 
       return printNode(node, context);

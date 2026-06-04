@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 - 2026-06-04
+
+- Added fuzz, local corpus, OSS corpus, install-smoke, semantic render-equivalence, and mined real-world pattern checks.
+- Added `mustache` as a development renderer dependency for render-equivalence coverage.
+- Expanded `check` to include deterministic fuzz coverage in addition to build and unit tests.
+- Added CI install-smoke coverage for packed tarballs.
+
 ## 0.1.2 - 2026-06-03
 
 - Added `.mst` and `.mu` file extensions for parser inference in editors and Prettier CLI usage.
