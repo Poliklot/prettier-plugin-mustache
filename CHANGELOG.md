@@ -1,10 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Added HTML+Mustache indentation formatting for nested HTML, multiline attributes, section-wrapped markup, parent/block templates, custom delimiters, comments, partials, self-closing tags, and tab indentation.
-- Added regression coverage for GitHub issue #5 and related HTML-heavy Mustache templates.
-
 ## 0.1.3 - 2026-06-04
 
 - Added fuzz, local corpus, OSS corpus, install-smoke, semantic render-equivalence, and mined real-world pattern checks.
