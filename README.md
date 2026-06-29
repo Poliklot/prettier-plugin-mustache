@@ -120,28 +120,32 @@ async function run(source) {
 
 ## What The Plugin Handles Today
 
-| Mustache feature | Example | Status |
-| --- | --- | --- |
-| Plain text templates | `Hello from {Mustache}!` | Preserved |
-| Escaped variables | `{{name}}` | Formatted |
-| Dotted names | `{{user.name}}` | Formatted |
-| Implicit iterator | `{{.}}` | Formatted |
-| Triple mustache | `{{{html}}}` | Formatted |
-| Ampersand unescaped variables | `{{& html}}` | Formatted |
-| Comments | `{{! comment}}` | Formatted |
-| Multiline comments | `{{! first\nsecond }}` | Preserved/formatted |
-| Sections | `{{#items}}...{{/items}}` | Formatted |
-| Inverted sections | `{{^items}}...{{/items}}` | Formatted |
-| Lambda sections | `{{#wrapped}}...{{/wrapped}}` | Syntax formatted; runtime behavior belongs to the renderer |
-| Partials | `{{> user}}` | Formatted |
-| Dynamic partial names | `{{>*partial}}` | Formatted |
-| Set delimiters | `{{=<% %>=}}` | Formatted and tracked |
-| Delimiter reset | `<%={{ }}=%>` | Formatted and tracked |
-| Blocks/inheritance extension | `{{$title}}...{{/title}}` | Formatted |
-| Parent templates | `{{< layout}}...{{/layout}}` | Formatted |
-| Dynamic parent names | `{{<*layout}}...{{/*layout}}` | Formatted |
-| Standalone comments / partials / delimiter tags | `{{! comment}}`, `{{> user}}`, `{{=<% %>=}}` | Formatted in multiline sections |
-| Broken/unmatched tags | `{{#items}}...` | Preserved raw instead of throwing |
+| Mustache feature                                | Example                                                 | Status                                                     |
+| ----------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
+| Plain text templates                            | `Hello from {Mustache}!`                                | Preserved                                                  |
+| Escaped variables                               | `{{name}}`                                              | Formatted                                                  |
+| Dotted names                                    | `{{user.name}}`                                         | Formatted                                                  |
+| Implicit iterator                               | `{{.}}`                                                 | Formatted                                                  |
+| Triple mustache                                 | `{{{html}}}`                                            | Formatted                                                  |
+| Ampersand unescaped variables                   | `{{& html}}`                                            | Formatted                                                  |
+| Comments                                        | `{{! comment}}`                                         | Formatted                                                  |
+| Multiline comments                              | `{{! first\nsecond }}`                                  | Preserved/formatted                                        |
+| Sections                                        | `{{#items}}...{{/items}}`                               | Formatted                                                  |
+| Inverted sections                               | `{{^items}}...{{/items}}`                               | Formatted                                                  |
+| Lambda sections                                 | `{{#wrapped}}...{{/wrapped}}`                           | Syntax formatted; runtime behavior belongs to the renderer |
+| Partials                                        | `{{> user}}`                                            | Formatted                                                  |
+| Dynamic partial names                           | `{{>*partial}}`                                         | Formatted                                                  |
+| Set delimiters                                  | `{{=<% %>=}}`                                           | Formatted and tracked                                      |
+| Delimiter reset                                 | `<%={{ }}=%>`                                           | Formatted and tracked                                      |
+| Blocks/inheritance extension                    | `{{$title}}...{{/title}}`                               | Formatted                                                  |
+| Parent templates                                | `{{< layout}}...{{/layout}}`                            | Formatted                                                  |
+| Dynamic parent names                            | `{{<*layout}}...{{/*layout}}`                           | Formatted                                                  |
+| Standalone comments / partials / delimiter tags | `{{! comment}}`, `{{> user}}`, `{{=<% %>=}}`            | Formatted in multiline sections                            |
+| HTML with Mustache                              | `<a href="{{url}}">{{name}}</a>`                        | Indented/formatted                                         |
+| Multiline HTML tags and attributes              | `<button\n  class="{{#primary}}...">`                   | Indented/formatted                                         |
+| Conditional class blocks                        | `{{#primary}}btn-primary{{/primary}}` inside `class=""` | Indented/formatted                                         |
+| Void/self-closing HTML tags                     | `<img src="{{src}}" />`, `<br />`                       | Preserved/formatted                                        |
+| Broken/unmatched tags                           | `{{#items}}...`                                         | Preserved raw instead of throwing                          |
 
 ## Formatting Behavior
 
@@ -223,6 +227,40 @@ formats as:
 {{/layout}}
 ```
 
+### HTML + Mustache templates
+
+The plugin is HTML-aware: it keeps HTML and Mustache nesting aligned instead of treating the file as plain text or as Handlebars/Glimmer.
+
+```mustache
+<ul>
+{{#items}}
+<li>
+<a href="{{url}}">{{name}}</a>
+{{#children}}
+<span>{{label}}</span>
+{{/children}}
+</li>
+{{/items}}
+</ul>
+```
+
+formats as:
+
+```mustache
+<ul>
+  {{#items}}
+    <li>
+      <a href="{{ url }}">{{ name }}</a>
+      {{#children}}
+        <span>{{ label }}</span>
+      {{/children}}
+    </li>
+  {{/items}}
+</ul>
+```
+
+Multiline HTML tags, multiline attributes, conditional class blocks, partials, comments, tables, void tags, and self-closing tags are handled with stable indentation.
+
 ### Custom delimiters
 
 ```mustache
@@ -238,7 +276,8 @@ formats as:
 ## Scope And Non-Goals
 
 - This is a Mustache formatter, not a Mustache renderer.
-- The plugin normalizes Mustache syntax and section indentation; it does not parse embedded HTML/CSS/JS as separate languages yet.
+- The plugin normalizes Mustache syntax and HTML+Mustache indentation, including nested HTML, multiline tags and attributes, conditional class blocks, partials, comments, tables, void tags, and self-closing tags.
+- The plugin does not run separate Prettier sub-formatters for embedded CSS or JavaScript inside `<style>` / `<script>` blocks yet.
 - Lambda behavior, partial loading, recursive partial expansion, HTML escaping, and context lookup are runtime renderer responsibilities.
 - This package does not claim Handlebars compatibility. Use [`@poliklot/prettier-plugin-handlebars`](https://www.npmjs.com/package/@poliklot/prettier-plugin-handlebars) for classic Handlebars templates.
 - This package does not claim Ember/Glimmer compatibility.
