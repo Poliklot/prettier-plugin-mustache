@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4](https://github.com/Poliklot/prettier-plugin-mustache/compare/v0.1.3...prettier-plugin-mustache-v0.1.4) (2026-06-29)
+
+### Bug Fixes
+
+* preserve HTML indentation in Mustache templates ([#11](https://github.com/Poliklot/prettier-plugin-mustache/pull/11)), closes [#5](https://github.com/Poliklot/prettier-plugin-mustache/issues/5)
+
 ## 0.1.3 - 2026-06-04
 
 - Added fuzz, local corpus, OSS corpus, install-smoke, semantic render-equivalence, and mined real-world pattern checks.
