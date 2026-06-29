@@ -1,12 +1,10 @@
 # Changelog
 
-## [0.1.4](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.3...prettier-plugin-mustache-v0.1.4) (2026-06-29)
-
+## [0.1.4](https://github.com/Poliklot/prettier-plugin-mustache/compare/v0.1.3...prettier-plugin-mustache-v0.1.4) (2026-06-29)
 
 ### Bug Fixes
 
-* preserve HTML indentation in Mustache templates ([3a3a6eb](https://github.com/Poliklot/prettier-plugin-mustache/commit/3a3a6eb8d91aea2b2b6c3111421725f827439da5))
-* preserve HTML indentation in Mustache templates ([3a54e63](https://github.com/Poliklot/prettier-plugin-mustache/commit/3a54e63030d2f4be57c6169aa09a9ae3b03bc3cb)), closes [#5](https://github.com/Poliklot/prettier-plugin-mustache/issues/5)
+* preserve HTML indentation in Mustache templates ([#11](https://github.com/Poliklot/prettier-plugin-mustache/pull/11)), closes [#5](https://github.com/Poliklot/prettier-plugin-mustache/issues/5)
 
 ## 0.1.3 - 2026-06-04
 
