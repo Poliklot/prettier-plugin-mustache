@@ -52,7 +52,7 @@ export function parse(text: string): Program {
   const normalized = normalizeInput(text);
   const delimiters: Delimiters = { open: '{{', close: '}}' };
   const result = parseNodes(normalized, 0, delimiters, null);
-  return withRange({ type: 'Program', body: result.nodes }, 0, normalized.length);
+  return withRange({ type: 'Program', body: result.nodes, source: normalized }, 0, normalized.length);
 }
 
 function parseNodes(text: string, position: number, delimiters: Delimiters, endName: string | null): ParseResult {

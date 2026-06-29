@@ -13,6 +13,7 @@ export type Node =
 export interface Program extends SourceRange {
   type: 'Program';
   body: Node[];
+  source?: string;
 }
 
 export interface TextNode extends SourceRange {
