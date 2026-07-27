@@ -1,6 +1,6 @@
 {
   "name": "prettier-plugin-mustache",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Prettier plugin for Mustache templates.",
   "license": "MIT",
   "type": "commonjs",
@@ -54,10 +54,10 @@
     "template-format-core": "^0.1.1"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.2",
     "mustache": "^4.2.0",
-    "prettier": "^3.9.1",
-    "typescript": "^6.0.3"
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "prettier": ">=3.0.0"

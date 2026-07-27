@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.5](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.4...prettier-plugin-mustache-v0.1.5) (2026-07-27)
+
+### Bug Fixes
+
+* update TypeScript, Prettier, and Node.js development types
+
 ## [0.1.4](https://github.com/Poliklot/prettier-plugin-mustache/compare/v0.1.3...prettier-plugin-mustache-v0.1.4) (2026-06-29)
 
 ### Bug Fixes
