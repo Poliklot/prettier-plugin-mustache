@@ -5,6 +5,15 @@ on:
     branches:
       - master
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to publish. Leave empty to run Release Please.
+        required: false
+        type: string
+      version:
+        description: Expected package version for a manual publish.
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -15,6 +24,7 @@ permissions:
 jobs:
   release-please:
     name: Create release PR or GitHub release
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.tag_name == '' }}
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -31,11 +41,18 @@ jobs:
   publish-npm:
     name: Publish npm package
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: >-
+      ${{
+        always() &&
+        (
+          needs.release-please.outputs.release_created == 'true' ||
+          (github.event_name == 'workflow_dispatch' && inputs.tag_name != '')
+        )
+      }}
     uses: ./.github/workflows/publish-npm.yml
     permissions:
       contents: read
       id-token: write
     with:
-      tag_name: ${{ needs.release-please.outputs.tag_name }}
-      version: ${{ needs.release-please.outputs.version }}
+      tag_name: ${{ inputs.tag_name || needs.release-please.outputs.tag_name }}
+      version: ${{ inputs.version || needs.release-please.outputs.version }}
