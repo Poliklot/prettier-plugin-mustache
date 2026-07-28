@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.5...prettier-plugin-mustache-v0.1.6) (2026-07-28)
+
+
+### Bug Fixes
+
+* **ci:** support trusted manual npm publishing ([f89c6fb](https://github.com/Poliklot/prettier-plugin-mustache/commit/f89c6fb10816c69322b2e8d2892abc3f30e9c394))
+
 ## [0.1.5](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.4...prettier-plugin-mustache-v0.1.5) (2026-07-27)
 
 ### Bug Fixes
