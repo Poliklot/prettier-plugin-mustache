@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.7](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.6...prettier-plugin-mustache-v0.1.7) (2026-08-11)
+
+
+### Bug Fixes
+
+* **ci:** support trusted manual npm publishing ([f89c6fb](https://github.com/Poliklot/prettier-plugin-mustache/commit/f89c6fb10816c69322b2e8d2892abc3f30e9c394))
+* **deps-dev:** update development dependencies ([14a5624](https://github.com/Poliklot/prettier-plugin-mustache/commit/14a5624725d10d8b9ba7e60829f3b27c1521d0a2))
+* preserve HTML indentation in Mustache templates ([3a3a6eb](https://github.com/Poliklot/prettier-plugin-mustache/commit/3a3a6eb8d91aea2b2b6c3111421725f827439da5))
+* preserve HTML indentation in Mustache templates ([3a54e63](https://github.com/Poliklot/prettier-plugin-mustache/commit/3a54e63030d2f4be57c6169aa09a9ae3b03bc3cb)), closes [#5](https://github.com/Poliklot/prettier-plugin-mustache/issues/5)
+
 ## [0.1.6](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.5...prettier-plugin-mustache-v0.1.6) (2026-08-11)
 
 
