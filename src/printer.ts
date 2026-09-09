@@ -317,11 +317,118 @@ async function formatEmbeddedRawText(
   }
 
   const indentPrefix = context.indentation.repeat(element.baseDepth + 1);
-  return formatted
-    .replace(/\n+$/g, '')
-    .split('\n')
-    .map((line) => restorePlaceholders(line, extracted.restore))
-    .map((line) => (line.length > 0 ? `${indentPrefix}${line}` : line));
+  const trimmedFormatted = formatted.replace(/\n+$/g, '');
+  const verbatimLines = findVerbatimContinuationLines(trimmedFormatted);
+  return trimmedFormatted.split('\n').map((line, lineIndex) => {
+    const restored = restorePlaceholders(line, extracted.restore);
+    if (restored.length === 0) {
+      return '';
+    }
+
+    // A continuation line of a multi-line block comment or template
+    // literal is content babel/css preserve exactly as given, not
+    // something they re-derive from scratch the way they do for ordinary
+    // code - only the construct's *opening* line gets fresh indentation.
+    // Adding indentPrefix to a line like that doesn't line it up with
+    // anything (it's stacked on whatever the source's own formatting
+    // happened to be), and since the next format pass would see that
+    // prefix already baked into what looks like more verbatim content, it
+    // would add a second prefix on top of it, and so on.
+    return verbatimLines[lineIndex] ? restored : `${indentPrefix}${restored}`;
+  });
+}
+
+function findVerbatimContinuationLines(text: string): boolean[] {
+  const verbatim = new Array<boolean>(text.split('\n').length).fill(false);
+
+  let line = 0;
+  let inBlockComment = false;
+  let templateDepth = 0;
+  let interpolationDepth = 0;
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (ch === '\n') {
+      if (inBlockComment || (templateDepth > 0 && interpolationDepth === 0)) {
+        verbatim[line + 1] = true;
+      }
+      line += 1;
+      i += 1;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ch === '*' && text[i + 1] === '/') {
+        inBlockComment = false;
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+
+    if (templateDepth > 0 && interpolationDepth === 0) {
+      if (ch === '\\') {
+        i += 2;
+      } else if (ch === '`') {
+        templateDepth -= 1;
+        i += 1;
+      } else if (ch === '$' && text[i + 1] === '{') {
+        interpolationDepth = 1;
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+
+    if (templateDepth > 0 && interpolationDepth > 0) {
+      // Approximate: a nested template literal's own braces/backticks
+      // inside an interpolation aren't tracked precisely, only enough to
+      // find the interpolation's closing brace in the common case.
+      if (ch === '{') {
+        interpolationDepth += 1;
+      } else if (ch === '}') {
+        interpolationDepth -= 1;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === '/' && text[i + 1] === '/') {
+      const nextNewline = text.indexOf('\n', i);
+      i = nextNewline === -1 ? text.length : nextNewline;
+      continue;
+    }
+
+    if (ch === '/' && text[i + 1] === '*') {
+      inBlockComment = true;
+      i += 2;
+      continue;
+    }
+
+    if (ch === '`') {
+      templateDepth += 1;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      i += 1;
+      while (i < text.length && text[i] !== quote) {
+        i += text[i] === '\\' ? 2 : 1;
+      }
+      i += 1;
+      continue;
+    }
+
+    i += 1;
+  }
+
+  return verbatim;
 }
 
 function formatRawTextFallback(bodyLines: string[], baseDepth: number, context: PrintContext, delimiters: Delimiters): string[] {

@@ -153,3 +153,38 @@ test('flushes an unterminated <script> with the flat fallback instead of droppin
   const formatted = await format(source);
   assert.ok(formatted.includes('doSomething();'));
 });
+
+test('does not compound indentation on a multi-line block comment across repeated passes', async () => {
+  // babel reformats a block comment's opening line but preserves its
+  // continuation lines exactly as given (including their original
+  // whitespace). Adding indentPrefix to every output line unconditionally
+  // used to stack an extra prefix onto those continuation lines on every
+  // format pass. Found via `npm run corpus:oss` (a real OpenAPI Generator
+  // template bundling webpack's style-loader boilerplate).
+  const source = template([
+    '<div>',
+    '  <script>',
+    '    /*',
+    '    \t\tMIT License',
+    '    \t\tAuthor Tobias Koppers @sokra',
+    '    \t*/',
+    '    var x = 1;',
+    '  </script>',
+    '</div>',
+  ]);
+
+  const once = await format(source);
+  const twice = await format(once);
+  const thrice = await format(twice);
+  assert.equal(twice, once);
+  assert.equal(thrice, once);
+});
+
+test('does not indent continuation lines of a multi-line template literal', async () => {
+  const source = template(['<script>', 'var s = `line one', 'line two`;', '</script>']);
+
+  const once = await format(source);
+  const twice = await format(once);
+  assert.equal(twice, once);
+  assert.ok(once.includes('line one\nline two`;'));
+});
