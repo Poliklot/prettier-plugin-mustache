@@ -277,6 +277,10 @@ async function formatEmbeddedRawText(
   options: ParserOptions<Node>,
   delimiters: Delimiters,
 ): Promise<string[]> {
+  if (options.embeddedLanguageFormatting === 'off') {
+    return formatRawTextFallback(element.lines, element.baseDepth, context, delimiters);
+  }
+
   const parserName = resolveEmbeddedParser(element.tag, element.attrsText);
   const bodyText = element.lines.join('\n');
 
@@ -285,6 +289,14 @@ async function formatEmbeddedRawText(
   }
 
   const extracted = extractMustachePlaceholders(bodyText, delimiters);
+  if (!extracted) {
+    // A section/comment/partial/delimiter tag isn't a standalone value -
+    // substituting it for a placeholder would change what the code around
+    // it means (or just isn't a fragment babel/css could ever parse on its
+    // own), so don't even attempt embedded formatting.
+    return formatRawTextFallback(element.lines, element.baseDepth, context, delimiters);
+  }
+
   delimiters.open = extracted.delimiters.open;
   delimiters.close = extracted.delimiters.close;
 
@@ -330,6 +342,13 @@ function resolveEmbeddedParser(tag: RawTextTag, attrsText: string): 'babel' | 'c
     return 'css';
   }
 
+  // A <script src="..."> ignores its body in the browser, so formatting
+  // that body as if it were the real script would be printing something
+  // that's never actually executed.
+  if (/\bsrc\s*=/i.test(attrsText)) {
+    return null;
+  }
+
   const typeMatch = attrsText.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
   const type = (typeMatch?.[1] ?? typeMatch?.[2] ?? '').trim().toLowerCase();
   return JS_SCRIPT_TYPES.has(type) ? 'babel' : null;
@@ -348,7 +367,20 @@ function matchesRawTextCloseTag(line: string, tag: RawTextTag): boolean {
   return new RegExp(`^<\\/\\s*${tag}\\s*>$`, 'i').test(line);
 }
 
-function extractMustachePlaceholders(text: string, delimiters: Delimiters): { text: string; restore: Map<string, string>; delimiters: Delimiters } {
+// Tokens that stand for a single inline value (a plain, triple, or ampersand
+// mustache) are safe to swap for an opaque placeholder: whatever babel/css
+// decides to do with that placeholder, restoring the original token
+// afterwards can't change the surrounding code's meaning. Anything
+// structural - a section/block boundary, a comment, a partial, a delimiter
+// change - is not: substituting `{{#Dark}}` for a bare identifier changes an
+// opening brace's meaning, not just its spelling, so this bails out instead
+// of guessing.
+const INLINE_VALUE_TOKEN_KINDS: TemplateTokenKind[] = ['mustache'];
+
+function extractMustachePlaceholders(
+  text: string,
+  delimiters: Delimiters,
+): { text: string; restore: Map<string, string>; delimiters: Delimiters } | null {
   const workingDelimiters = cloneDelimiters(delimiters);
   const restore = new Map<string, string>();
   const parts: string[] = [];
@@ -369,11 +401,21 @@ function extractMustachePlaceholders(text: string, delimiters: Delimiters): { te
       break;
     }
 
+    if (!INLINE_VALUE_TOKEN_KINDS.includes(token.kind)) {
+      return null;
+    }
+
     parts.push(text.slice(position, tokenStart));
 
-    const placeholder = `__PRETTIER_MUSTACHE_${index}__`;
+    // babel/css decide where to wrap a line before this placeholder gets
+    // restored, so a placeholder whose length doesn't resemble the restored
+    // text's length produces a wrapping decision for a line width the
+    // output will never actually have. Matching the restored text's length
+    // keeps that decision roughly honest.
+    const replacement = printTemplateToken(token);
+    const placeholder = makePlaceholder(index, replacement.length);
     index += 1;
-    restore.set(placeholder, printTemplateToken(token));
+    restore.set(placeholder, replacement);
     parts.push(placeholder);
 
     if (token.kind === 'delimiter' && token.nextOpen && token.nextClose) {
@@ -385,6 +427,13 @@ function extractMustachePlaceholders(text: string, delimiters: Delimiters): { te
   }
 
   return { text: parts.join(''), restore, delimiters: workingDelimiters };
+}
+
+function makePlaceholder(index: number, targetLength: number): string {
+  const prefix = `__M${index}_`;
+  const suffix = '__';
+  const padding = 'X'.repeat(Math.max(targetLength - prefix.length - suffix.length, 0));
+  return `${prefix}${padding}${suffix}`;
 }
 
 function restorePlaceholders(line: string, restore: Map<string, string>): string {

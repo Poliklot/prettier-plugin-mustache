@@ -66,7 +66,11 @@ test('respects tabWidth/useTabs for embedded <script>/<style> content', async ()
   assert.equal(await format(source, { useTabs: true }), template(['<script>', '\tvar x = { a: 1, b: 2 };', '</script>']));
 });
 
-test('re-wraps long embedded <script> lines to fit under the tag indent', async () => {
+test('bases wrapping decisions on the restored line width, not the placeholder width', async () => {
+  // This line is short enough to fit on one line once `{{City}}` is back in
+  // place, but a fixed-length placeholder (e.g. `__PRETTIER_MUSTACHE_0__`,
+  // longer than `{{City}}`) would push it over printWidth and force an
+  // unwanted wrap that the restored output doesn't actually need.
   const source = template([
     '<div>',
     '  <div>',
@@ -78,8 +82,21 @@ test('re-wraps long embedded <script> lines to fit under the tag indent', async 
   ]);
 
   const formatted = await format(source);
-  assert.ok(formatted.includes('var cityEl = document.querySelector('));
-  assert.ok(!formatted.includes('var cityEl = document.querySelector(\'[id="city-'));
+  assert.ok(formatted.includes('var cityEl = document.querySelector(\'[id="city-{{ City }}"]\');'));
+
+  const second = await format(formatted);
+  assert.equal(second, formatted);
+});
+
+test('still wraps a line that is genuinely too long once restored', async () => {
+  const source = template([
+    '<script>',
+    'var cityGroup = document.querySelector(\'[id="a-very-long-selector-that-does-not-fit-{{City}}"]\');',
+    '</script>',
+  ]);
+
+  const formatted = await format(source);
+  assert.ok(formatted.includes('var cityGroup = document.querySelector(\n'));
 
   const second = await format(formatted);
   assert.equal(second, formatted);
@@ -93,15 +110,16 @@ test('does not run embedded formatting for non-JavaScript <script type="...">', 
   await assertFormats(source, expected);
 });
 
-test('falls back to flat formatting when a mustache section does not leave standalone JS behind', async () => {
+test('never substitutes section/comment/partial tags - falls back to flat formatting instead', async () => {
+  // {{#Dark}}/{{/Dark}} are structural, not a value - swapping them for a
+  // placeholder would change what the braces around them mean, so this
+  // should always take the flat fallback rather than gamble on babel
+  // accepting the substituted text.
   const source = template(['<script>', '{{#Dark}}', 'var isDark = true;', '{{/Dark}}', '</script>']);
 
-  const formatted = await format(source);
+  const expected = template(['<script>', '  {{#Dark}}', '  var isDark = true;', '  {{/Dark}}', '</script>']);
 
-  // Whether or not the fallback engages for this particular shape, the file
-  // must format without throwing and must be idempotent either way.
-  assert.equal(await format(formatted), formatted);
-  assert.ok(formatted.includes('var isDark = true;'));
+  await assertFormats(source, expected);
 });
 
 test('leaves empty inlined <script>/<style> tags (no body) untouched', async () => {
@@ -111,6 +129,22 @@ test('leaves empty inlined <script>/<style> tags (no body) untouched', async () 
   ]);
 
   await assertFormats(source, source);
+});
+
+test('does not format a <script src="..."> body (browsers ignore it anyway)', async () => {
+  const source = template(['<script src="app.js">', 'this is not actually run', '</script>']);
+
+  const expected = template(['<script src="app.js">', '  this is not actually run', '</script>']);
+
+  await assertFormats(source, expected);
+});
+
+test('respects embeddedLanguageFormatting: "off"', async () => {
+  const source = template(['<script>', 'var x = {a: 1};', '</script>']);
+
+  const expected = template(['<script>', '  var x = {a: 1};', '</script>']);
+
+  assert.equal(await format(source, { embeddedLanguageFormatting: 'off' }), expected);
 });
 
 test('flushes an unterminated <script> with the flat fallback instead of dropping it', async () => {
