@@ -1,5 +1,6 @@
-import type { AstPath, Doc, ParserOptions, Printer } from 'prettier';
+import type { AstPath, Doc, Options, ParserOptions, Printer } from 'prettier';
 import { isTemplateExpressionQuoteStart, parseTemplateExpression, voidElements } from 'template-format-core';
+import { formatEmbeddedDoc, type TextToDoc } from './embedded';
 import type {
   CommentStatement,
   DelimiterStatement,
@@ -17,6 +18,26 @@ interface PrintContext {
 interface Delimiters {
   open: string;
   close: string;
+}
+
+type RawTextTag = 'script' | 'style';
+
+// Script types whose body is still plain JavaScript. Anything else (JSON
+// islands, other templating languages sharing the file, etc.) is left to the
+// existing flat-indent fallback rather than risking a confidently wrong
+// reformat.
+const JS_SCRIPT_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module', 'text/babel', 'application/ecmascript']);
+
+interface PendingRawTextElement {
+  tag: RawTextTag;
+  baseDepth: number;
+  attrsText: string;
+  lines: string[];
+}
+
+interface RawTextRequest {
+  element: PendingRawTextElement;
+  delimiters: Delimiters;
 }
 
 type TemplateTokenKind = 'mustache' | 'partial' | 'comment' | 'sectionStart' | 'sectionEnd' | 'delimiter';
@@ -49,6 +70,25 @@ interface PendingAttributeValue {
 }
 
 export const printer: Printer<Node> = {
+  embed(path, options) {
+    const node = path.node;
+    if (!node || node.type !== 'Program' || typeof node.source !== 'string') {
+      return null;
+    }
+
+    // The source formatter can remain line-based: only the root needs an
+    // asynchronous embed hook. print() itself always returns a synchronous Doc.
+    return async (textToDoc) => {
+      const source = formatSource(node.source, options);
+      let step = source.next();
+      while (!step.done) {
+        const { element, delimiters } = step.value;
+        const body = await formatEmbeddedRawText(element, createPrintContext(options), options, delimiters, textToDoc);
+        step = source.next(body);
+      }
+      return step.value;
+    };
+  },
   print(path: AstPath<Node>, options: ParserOptions<Node>): Doc {
     const node = path.getValue();
 
@@ -60,7 +100,14 @@ export const printer: Printer<Node> = {
 
     if (node.type === 'Program') {
       if (typeof node.source === 'string') {
-        return formatSource(node.source, options);
+        // Prettier skips embed() when embeddedLanguageFormatting is off.
+        const source = formatSource(node.source, options);
+        let step = source.next();
+        while (!step.done) {
+          const { element, delimiters } = step.value;
+          step = source.next(formatRawTextFallback(element.lines, element.baseDepth, context, delimiters));
+        }
+        return step.value;
       }
 
       return formatProgram(node, context);
@@ -73,13 +120,13 @@ export const printer: Printer<Node> = {
   },
 };
 
-function createPrintContext(options: ParserOptions<Node>): PrintContext {
+function createPrintContext(options: Options): PrintContext {
   return {
     indentation: options.useTabs ? '\t' : ' '.repeat(options.tabWidth ?? 2),
   };
 }
 
-function formatSource(source: string, options: ParserOptions<Node>): string {
+function* formatSource(source: string, options: Options): Generator<RawTextRequest, string, string[]> {
   const normalized = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
   if (normalized.trim().length === 0) {
@@ -100,16 +147,34 @@ function formatSource(source: string, options: ParserOptions<Node>): string {
     return formatted.length > 0 ? `${formatted}\n` : '';
   }
 
+  const rawTextCloseLines = findRawTextCloseLines(lines);
+
   const state = {
     depth: 0,
     delimiters: createDefaultDelimiters(),
     pendingOpenTag: undefined as PendingOpenTag | undefined,
     pendingAttributeValue: undefined as PendingAttributeValue | undefined,
+    rawTextElement: undefined as PendingRawTextElement | undefined,
   };
   const output: string[] = [];
 
-  for (const rawLine of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex];
     const rawTrimmed = rawLine.trim();
+
+    if (state.rawTextElement) {
+      if (matchesRawTextCloseTag(rawTrimmed, state.rawTextElement.tag)) {
+        const formattedBody = yield { element: state.rawTextElement, delimiters: state.delimiters };
+        output.push(...formattedBody);
+        output.push(`${context.indentation.repeat(state.rawTextElement.baseDepth)}${rawTrimmed}`);
+        state.depth = state.rawTextElement.baseDepth;
+        state.rawTextElement = undefined;
+        continue;
+      }
+
+      state.rawTextElement.lines.push(rawLine);
+      continue;
+    }
 
     if (rawTrimmed.length === 0) {
       output.push('');
@@ -210,11 +275,215 @@ function formatSource(source: string, options: ParserOptions<Node>): string {
       continue;
     }
 
+    const rawTextOpenTag = matchRawTextOpenTag(normalizedLine);
+    const closeLine = rawTextOpenTag ? rawTextCloseLines[rawTextOpenTag.tag][lineIndex] : -1;
+    if (rawTextOpenTag && closeLine >= 0 && matchesRawTextCloseTag(lines[closeLine].trim(), rawTextOpenTag.tag)) {
+      state.rawTextElement = {
+        tag: rawTextOpenTag.tag,
+        baseDepth: indentDepth,
+        attrsText: rawTextOpenTag.attrsText,
+        lines: [],
+      };
+      continue;
+    }
+
     const htmlDepthDelta = getHtmlDepthDelta(normalizedLine, leadingCloseCount);
     state.depth = Math.max(0, state.depth + htmlDepthDelta);
   }
 
   return `${output.join('\n').trimEnd()}\n`;
+}
+
+async function formatEmbeddedRawText(
+  element: PendingRawTextElement,
+  context: PrintContext,
+  options: Options,
+  delimiters: Delimiters,
+  textToDoc: TextToDoc,
+): Promise<string[]> {
+  const fallback = () => formatRawTextFallback(element.lines, element.baseDepth, context, delimiters);
+  const parserName = resolveEmbeddedParser(element.tag, element.attrsText);
+  const bodyText = element.lines.join('\n');
+
+  if (!parserName || bodyText.trim().length === 0) {
+    return fallback();
+  }
+
+  const extracted = extractMustachePlaceholders(bodyText, delimiters);
+  if (!extracted) {
+    return fallback();
+  }
+
+  const formatted = await formatEmbeddedDoc(
+    extracted.text,
+    extracted.restore,
+    parserName,
+    element.baseDepth + 1,
+    options,
+    textToDoc,
+  );
+  return formatted === null ? fallback() : formatted.split('\n');
+}
+
+function formatRawTextFallback(bodyLines: string[], baseDepth: number, context: PrintContext, delimiters: Delimiters): string[] {
+  const indentPrefix = context.indentation.repeat(baseDepth + 1);
+  return bodyLines.map((line) => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+      return '';
+    }
+
+    const normalized = normalizeMustacheInText(trimmed, delimiters).text.trim();
+    return `${indentPrefix}${normalized}`;
+  });
+}
+
+function resolveEmbeddedParser(tag: RawTextTag, attrsText: string): 'babel' | 'css' | null {
+  const attributes = parseRawTextAttributes(attrsText);
+  if (!attributes) {
+    return null;
+  }
+
+  const type = (attributes.get('type') ?? '').trim().toLowerCase();
+  const lang = (attributes.get('lang') ?? '').trim().toLowerCase();
+  if (tag === 'style') {
+    return (!type || type === 'text/css') && (!lang || lang === 'css') ? 'css' : null;
+  }
+  if (attributes.has('src') || (lang && !['js', 'javascript'].includes(lang))) {
+    return null;
+  }
+  return JS_SCRIPT_TYPES.has(type) ? 'babel' : null;
+}
+
+function parseRawTextAttributes(text: string): Map<string, string> | null {
+  const attributes = new Map<string, string>();
+  let position = 0;
+  while (position < text.length) {
+    const whitespace = text.slice(position).match(/^\s+/);
+    if (!whitespace) {
+      return null;
+    }
+    position += whitespace[0].length;
+    if (position === text.length) {
+      break;
+    }
+
+    const nameMatch = text.slice(position).match(/^[^\s=/<>"'`]+/);
+    if (!nameMatch) {
+      return null;
+    }
+    const name = nameMatch[0].toLowerCase();
+    position += nameMatch[0].length;
+    const afterName = position;
+    position += text.slice(position).match(/^\s*/)?.[0].length ?? 0;
+
+    let value = '';
+    if (text[position] === '=') {
+      position += 1;
+      position += text.slice(position).match(/^\s*/)?.[0].length ?? 0;
+      const quote = text[position];
+      if (quote === '"' || quote === "'") {
+        const end = text.indexOf(quote, position + 1);
+        if (end === -1) {
+          return null;
+        }
+        value = text.slice(position + 1, end);
+        position = end + 1;
+      } else {
+        const valueMatch = text.slice(position).match(/^[^\s<>"'`=]+/);
+        if (!valueMatch) {
+          return null;
+        }
+        value = valueMatch[0];
+        position += value.length;
+      }
+    } else {
+      // Leave the separator for the next attribute to consume.
+      position = afterName;
+    }
+    // HTML uses the first occurrence of a duplicate attribute.
+    if (!attributes.has(name)) {
+      attributes.set(name, value);
+    }
+  }
+  return attributes;
+}
+
+function matchRawTextOpenTag(line: string): { tag: RawTextTag; attrsText: string } | null {
+  const match = line.match(/^<(script|style)(\s[\s\S]*|)>$/i);
+  if (!match || /\/\s*$/.test(match[2]) || !parseRawTextAttributes(match[2])) {
+    return null;
+  }
+  return { tag: match[1].toLowerCase() as RawTextTag, attrsText: match[2] };
+}
+
+function matchesRawTextCloseTag(line: string, tag: RawTextTag): boolean {
+  return new RegExp(`^<\\/${tag}\\s*>$`, 'i').test(line);
+}
+
+function findRawTextCloseLines(lines: string[]): Record<RawTextTag, number[]> {
+  const result: Record<RawTextTag, number[]> = { script: [], style: [] };
+  for (const tag of ['script', 'style'] as const) {
+    const close = new RegExp(`<\\/${tag}(?=[\\s/>])`, 'i');
+    let next = -1;
+    // Cache the first later close in linear time, including unsupported inline
+    // closes. They terminate HTML raw text even when inside a JS string, and
+    // must prevent the embedded buffer from consuming subsequent HTML.
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      result[tag][index] = next;
+      if (close.test(lines[index])) {
+        next = index;
+      }
+    }
+  }
+  return result;
+}
+
+function extractMustachePlaceholders(
+  text: string,
+  delimiters: Delimiters,
+): { text: string; restore: Map<string, string> } | null {
+  const tokens: { token: TemplateToken; replacement: string }[] = [];
+  let position = 0;
+  while (position < text.length) {
+    const start = findNextTokenStart(text, position, delimiters);
+    if (start === -1) {
+      break;
+    }
+    const token = parseTemplateToken(text, start, delimiters);
+    // Structural tags and unescaped fragments can alter the surrounding
+    // grammar. Keep them on the legacy path rather than guessing their value.
+    if (!token || token.kind !== 'mustache' || token.triple || token.ampersand) {
+      return null;
+    }
+    const replacement = printTemplateToken(token);
+    if (/["'\\`\r\n]/.test(replacement) || text[start - 1] === '\\') {
+      return null;
+    }
+    tokens.push({ token, replacement });
+    position = token.end;
+  }
+
+  // Check both the input and normalized replacements. Lowercase markers without
+  // a leading underscore survive CSS normalization; a hyphen keeps dynamic JS keys
+  // quoted even with quoteProps: 'as-needed'. Keep widths close to real tokens.
+  const reserved = (text + tokens.map(({ replacement }) => replacement).join('')).toLowerCase();
+  let salt = 0;
+  while (reserved.includes(`m${salt}_`)) {
+    salt += 1;
+  }
+  const restore = new Map<string, string>();
+  const parts: string[] = [];
+  position = 0;
+  for (const [index, { token, replacement }] of tokens.entries()) {
+    const prefix = `m${salt}_${index.toString(36)}-`;
+    const placeholder = `${prefix}${'x'.repeat(Math.max(replacement.length - prefix.length - 1, 0))}z`;
+    parts.push(text.slice(position, token.start), placeholder);
+    restore.set(placeholder, replacement);
+    position = token.end;
+  }
+  parts.push(text.slice(position));
+  return { text: parts.join(''), restore };
 }
 
 function createDefaultDelimiters(): Delimiters {

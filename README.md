@@ -146,6 +146,7 @@ async function run(source) {
 | Conditional class blocks                        | `{{#primary}}btn-primary{{/primary}}` inside `class=""` | Indented/formatted                                         |
 | Void/self-closing HTML tags                     | `<img src="{{src}}" />`, `<br />`                       | Preserved/formatted                                        |
 | Broken/unmatched tags                           | `{{#items}}...`                                         | Preserved raw instead of throwing                          |
+| Embedded `<script>`/`<style>`                   | Opening and closing tags on separate, dedicated lines   | Safe bodies formatted with Prettier's `babel`/`css` printers |
 
 ## Formatting Behavior
 
@@ -273,11 +274,79 @@ formats as:
 {{= <% %> =}}Hello <% name %> <%= {{ }} =%> {{ again }}
 ```
 
+### Embedded `<script>` and `<style>`
+
+A `<script>` or `<style>` tag that sits alone on its own line, with its
+closing tag alone on a later line, has its body reformatted with Prettier's
+own `babel`/`css` printers instead of reindenting every line at the same depth.
+Plain escaped Mustache values inside quoted JavaScript strings, or CSS
+selectors/properties/values, are protected with collision-free placeholders.
+They are restored in the Doc before final line wrapping, so the output width
+is based on the real Mustache tags:
+
+```mustache
+<style>
+[id="county-{{County}}"] {
+fill: #d00;
+}
+</style>
+<script>
+setupZoombox({
+mapId: "map",
+targetId: "county-{{County}}",
+});
+</script>
+```
+
+formats as:
+
+```mustache
+<style>
+  [id="county-{{ County }}"] {
+    fill: #d00;
+  }
+</style>
+<script>
+  setupZoombox({
+    mapId: "map",
+    targetId: "county-{{ County }}",
+  });
+</script>
+```
+
+Embedded formatting uses Prettier's asynchronous `embed()` hook and Doc
+indentation, so template-literal contents, escaped line continuations, and
+verbatim comments are not given an extra indentation prefix on every pass.
+The caller's applicable formatting options are inherited, including
+`singleQuote`, `semi`, `arrowParens`, `tabWidth`, `useTabs`, and `printWidth`.
+Set `embeddedLanguageFormatting: 'off'` to retain the flat fallback output.
+
+Safety and scope:
+
+- Quoted and unquoted `type` attributes are recognized. Scripts are formatted
+  only for JavaScript-ish types (no `type`, `text/javascript`, `module`,
+  `application/javascript`, `text/babel`, or `application/ecmascript`). A
+  `src` attribute disables body formatting. Non-JS `lang` values also fall back.
+- Styles are formatted only with no type or `type="text/css"`, and no language
+  or `lang="css"`. Other languages are not sent to the CSS printer.
+- JavaScript placeholders must be proven to occur inside ordinary quoted
+  string literals. Dynamic property keys stay quoted. Bare expressions,
+  Mustache values in template-literal text, and strings with escapes use the fallback
+  because a runtime value can change their grammar or interact with escaping.
+- Triple/ampersand values, sections, comments, partials, delimiter changes,
+  malformed tokens, and interpolated CSS containing escapes also use the
+  fallback. Syntax errors or lost/duplicated placeholders do not fail the
+  whole file; they leave the body on the same fallback path.
+- The fallback retains the previous flat, indented-but-unformatted behavior;
+  it does not attempt to format the embedded language. Unsupported tag shapes
+  (inline closes, multiline opening tags, or missing closes) follow the legacy
+  HTML formatting path without buffering the following document as raw text.
+
 ## Scope And Non-Goals
 
 - This is a Mustache formatter, not a Mustache renderer.
 - The plugin normalizes Mustache syntax and HTML+Mustache indentation, including nested HTML, multiline tags and attributes, conditional class blocks, partials, comments, tables, void tags, and self-closing tags.
-- The plugin does not run separate Prettier sub-formatters for embedded CSS or JavaScript inside `<style>` / `<script>` blocks yet.
+- The plugin formats embedded CSS/JavaScript inside `<style>`/`<script>` blocks that sit on their own lines (see "Embedded `<script>` and `<style>`" above); other shapes (e.g. a one-line `<script>...</script>`, or a body that isn't valid JS/CSS after Mustache substitution) keep the previous flat formatting.
 - Lambda behavior, partial loading, recursive partial expansion, HTML escaping, and context lookup are runtime renderer responsibilities.
 - This package does not claim Handlebars compatibility. Use [`@poliklot/prettier-plugin-handlebars`](https://www.npmjs.com/package/@poliklot/prettier-plugin-handlebars) for classic Handlebars templates.
 - This package does not claim Ember/Glimmer compatibility.

@@ -6,6 +6,7 @@ import path from 'node:path';
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'prettier-plugin-mustache-install-'));
 const projectRoot = path.join(tempRoot, 'project');
+const prettierVersion = process.env.MUSTACHE_SMOKE_PRETTIER_VERSION || 'latest';
 fs.mkdirSync(projectRoot, { recursive: true });
 
 function run(command, args, options = {}) {
@@ -28,7 +29,7 @@ function run(command, args, options = {}) {
   return result;
 }
 
-const pack = run('npm', ['pack', '--pack-destination', tempRoot], { stdio: 'inherit' });
+run('npm', ['pack', '--pack-destination', tempRoot], { stdio: 'inherit' });
 const tarball = fs
   .readdirSync(tempRoot)
   .filter((name) => name.endsWith('.tgz'))
@@ -39,23 +40,43 @@ if (!tarball) {
 }
 
 fs.writeFileSync(path.join(projectRoot, 'package.json'), '{"type":"commonjs"}\n');
-run('npm', ['install', 'prettier', tarball], { cwd: projectRoot, stdio: 'inherit' });
+run('npm', ['install', `prettier@${prettierVersion}`, tarball], { cwd: projectRoot, stdio: 'inherit' });
 fs.writeFileSync(path.join(projectRoot, 'sample.mst'), '{{#items}}\n<li>{{name}}</li>\n{{/items}}\n');
 
-const verify = `
+const verify = String.raw`
+const assert = require('node:assert/strict');
 const prettier = require('prettier');
 const plugin = require('prettier-plugin-mustache');
-Promise.all([
-  prettier.format('{{#items}}\\n<li>{{name}}</li>\\n{{/items}}', { filepath: 'sample.mst', plugins: [plugin], tabWidth: 4 }),
-  prettier.format('{{#items}}\\n<li>{{name}}</li>\\n{{/items}}', { filepath: 'sample.mu', plugins: [plugin], useTabs: true }),
-]).then(([spaces, tabs]) => {
-  if (spaces !== '{{#items}}\\n    <li>{{ name }}</li>\\n{{/items}}\\n') process.exit(1);
-  if (tabs !== '{{#items}}\\n\\t<li>{{ name }}</li>\\n{{/items}}\\n') process.exit(1);
-}).catch((error) => {
+const format = (source, options = {}) => prettier.format(source, { filepath: 'sample.mst', plugins: [plugin], ...options });
+(async () => {
+  assert.equal(
+    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { tabWidth: 4 }),
+    '{{#items}}\n    <li>{{ name }}</li>\n{{/items}}\n',
+  );
+  assert.equal(
+    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { filepath: 'sample.mu', useTabs: true }),
+    '{{#items}}\n\t<li>{{ name }}</li>\n{{/items}}\n',
+  );
+  const fixtures = [
+    [
+      '<script>\nconst result={"{{key}}":{a:1,b:2}};\n</script>\n',
+      '<script>\n  const result = { "{{ key }}": { a: 1, b: 2 } };\n</script>\n',
+    ],
+    [
+      '<style>\n.{{class}}{ {{property}}:{{color}};width:calc(({{expr}})*2); }\n</style>\n',
+      '<style>\n  .{{ class }} {\n    {{ property }}: {{ color }};\n    width: calc(({{ expr }}) * 2);\n  }\n</style>\n',
+    ],
+  ];
+  for (const [source, expected] of fixtures) {
+    const formatted = await format(source);
+    assert.equal(formatted, expected);
+    assert.equal(await format(formatted), formatted);
+  }
+})().catch((error) => {
   console.error(error);
   process.exit(1);
 });
 `;
 
 run(process.execPath, ['-e', verify], { cwd: projectRoot, stdio: 'inherit' });
-console.log('Install smoke passed with prettier@latest.');
+console.log(`Install smoke passed with prettier@${prettierVersion}.`);
