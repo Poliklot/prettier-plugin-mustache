@@ -146,7 +146,7 @@ async function run(source) {
 | Conditional class blocks                        | `{{#primary}}btn-primary{{/primary}}` inside `class=""` | Indented/formatted                                         |
 | Void/self-closing HTML tags                     | `<img src="{{src}}" />`, `<br />`                       | Preserved/formatted                                        |
 | Broken/unmatched tags                           | `{{#items}}...`                                         | Preserved raw instead of throwing                          |
-| Embedded `<script>`/`<style>`                   | `<script>{{value}}</script>`                            | Reformatted with Prettier's `babel`/`css` printers         |
+| Embedded `<script>`/`<style>`                   | Opening and closing tags on separate, dedicated lines   | Safe bodies formatted with Prettier's `babel`/`css` printers |
 
 ## Formatting Behavior
 
@@ -278,10 +278,11 @@ formats as:
 
 A `<script>` or `<style>` tag that sits alone on its own line, with its
 closing tag alone on a later line, has its body reformatted with Prettier's
-own `babel`/`css` printers instead of being left as flat, unindented text.
-Mustache tags inside the body (even inside a string or a CSS selector) are
-swapped for placeholders before formatting and restored afterwards, so
-`babel`/`css` never have to parse Mustache syntax themselves:
+own `babel`/`css` printers instead of reindenting every line at the same depth.
+Plain escaped Mustache values inside quoted JavaScript strings, or CSS
+selectors/properties/values, are protected with collision-free placeholders.
+They are restored in the Doc before final line wrapping, so the output width
+is based on the real Mustache tags:
 
 ```mustache
 <style>
@@ -313,13 +314,33 @@ formats as:
 </script>
 ```
 
-`<script type="...">` is only formatted for JavaScript-ish types (no `type`,
-or `text/javascript`, `module`, `application/javascript`, `text/babel`,
-`application/ecmascript`); anything else — and any body that isn't valid
-JS/CSS once its Mustache tags are replaced with placeholders, e.g. a
-`{{#section}}` that doesn't wrap a standalone statement/declaration — falls
-back to the previous flat, indented-but-unformatted output rather than
-failing the whole file's formatting.
+Embedded formatting uses Prettier's asynchronous `embed()` hook and Doc
+indentation, so template-literal contents, escaped line continuations, and
+verbatim comments are not given an extra indentation prefix on every pass.
+The caller's applicable formatting options are inherited, including
+`singleQuote`, `semi`, `arrowParens`, `tabWidth`, `useTabs`, and `printWidth`.
+Set `embeddedLanguageFormatting: 'off'` to retain the flat fallback output.
+
+Safety and scope:
+
+- Quoted and unquoted `type` attributes are recognized. Scripts are formatted
+  only for JavaScript-ish types (no `type`, `text/javascript`, `module`,
+  `application/javascript`, `text/babel`, or `application/ecmascript`). A
+  `src` attribute disables body formatting. Non-JS `lang` values also fall back.
+- Styles are formatted only with no type or `type="text/css"`, and no language
+  or `lang="css"`. Other languages are not sent to the CSS printer.
+- JavaScript placeholders must be proven to occur inside ordinary quoted
+  string literals. Dynamic property keys stay quoted. Bare expressions,
+  Mustache values in template-literal text, and strings with escapes use the fallback
+  because a runtime value can change their grammar or interact with escaping.
+- Triple/ampersand values, sections, comments, partials, delimiter changes,
+  malformed tokens, and interpolated CSS containing escapes also use the
+  fallback. Syntax errors or lost/duplicated placeholders do not fail the
+  whole file; they leave the body on the same fallback path.
+- The fallback retains the previous flat, indented-but-unformatted behavior;
+  it does not attempt to format the embedded language. Unsupported tag shapes
+  (inline closes, multiline opening tags, or missing closes) follow the legacy
+  HTML formatting path without buffering the following document as raw text.
 
 ## Scope And Non-Goals
 
