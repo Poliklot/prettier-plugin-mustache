@@ -6,7 +6,6 @@
 ### Features
 
 * format embedded &lt;script&gt;/&lt;style&gt; content with babel/css ([c7f9517](https://github.com/Poliklot/prettier-plugin-mustache/commit/c7f9517a9a8430fec8f6453fa283c2e8923f72bb))
-* format embedded &lt;script&gt;/&lt;style&gt; content with babel/css ([f66d7b6](https://github.com/Poliklot/prettier-plugin-mustache/commit/f66d7b63cd812508643e491ed1cd364ac60b2c5a))
 
 
 ### Bug Fixes
