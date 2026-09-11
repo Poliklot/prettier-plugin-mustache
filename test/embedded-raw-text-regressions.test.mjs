@@ -23,7 +23,8 @@ async function format(source, options = {}) {
 }
 
 function scriptBody(source) {
-  const match = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/i);
+  // Extract only our fixed fixtures; this is not an HTML sanitizer.
+  const match = source.match(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/i);
   assert.ok(match, 'The formatted fixture must retain its script element');
   return match[1];
 }

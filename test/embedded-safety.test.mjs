@@ -17,9 +17,17 @@ async function stable(source, options = {}) {
 }
 
 function result(source, view = {}) {
-  const body = mustache.render(source, view).match(/<script\b[^>]*>([\s\S]*?)<\/script>/i)[1];
+  // Extract only our fixed fixtures; this is not an HTML sanitizer.
+  const body = mustache.render(source, view).match(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/i)[1];
   return vm.runInNewContext(`${body}\nJSON.stringify(result)`, {}, { timeout: 1000 });
 }
+
+test('retains rendered results with whitespace, case, or attributes in script end tags', async () => {
+  for (const close of ['</script >', '</SCRIPT>', '</script data-fixture=end>']) {
+    const source = `<script>\nconst result={"{{key}}":1};\n${close}\n`;
+    assert.equal(result(await stable(source), { key: 'foo-bar' }), result(source, { key: 'foo-bar' }));
+  }
+});
 
 test('print remains synchronous when embedding is disabled', () => {
   const source = template('script', 'const x={a:1};');
