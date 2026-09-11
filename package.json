@@ -1,6 +1,6 @@
 {
   "name": "prettier-plugin-mustache",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Prettier plugin for Mustache templates.",
   "license": "MIT",
   "type": "commonjs",

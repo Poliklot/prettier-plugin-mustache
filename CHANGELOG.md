@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.6...prettier-plugin-mustache-v0.2.0) (2026-09-11)
+
+
+### Features
+
+* format embedded &lt;script&gt;/&lt;style&gt; content with babel/css ([c7f9517](https://github.com/Poliklot/prettier-plugin-mustache/commit/c7f9517a9a8430fec8f6453fa283c2e8923f72bb))
+
+
+### Bug Fixes
+
+* base embedded wrap decisions on restored width, tighten safety ([4c8b719](https://github.com/Poliklot/prettier-plugin-mustache/commit/4c8b71972e816222d400835233b7147f7804f54a))
+* don't re-indent verbatim continuation lines in embedded code ([10108cc](https://github.com/Poliklot/prettier-plugin-mustache/commit/10108ccdff95c0dea444510a4e0af3354390dca0))
+* safely format embedded script and style bodies ([da81980](https://github.com/Poliklot/prettier-plugin-mustache/commit/da8198051395dcbfe2c2aa0e47c18d78ed123ec1))
+
 ## [0.1.6](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.5...prettier-plugin-mustache-v0.1.6) (2026-08-11)
 
 
