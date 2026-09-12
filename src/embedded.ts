@@ -1,6 +1,7 @@
-import { doc } from 'prettier';
 import type { Doc, Options, ParserOptions } from 'prettier';
 import { parsers as babelParsers } from 'prettier/plugins/babel';
+import { restorePlaceholderDoc } from './placeholder-doc';
+import type { EmbeddedLanguage } from './source';
 
 export type TextToDoc = (text: string, options: Options) => Promise<Doc>;
 
@@ -10,6 +11,7 @@ export type TextToDoc = (text: string, options: Options) => Promise<Doc>;
 // strings, regular expressions, or nested template literals with a scanner.
 function placeholdersAreStrings(ast: unknown, placeholders: Map<string, string>): boolean {
   const remaining = new Set(placeholders.keys());
+  const pattern = new RegExp([...placeholders.keys()].join('|'), 'g');
   const visited = new Set<object>();
   function visit(value: unknown): void {
     if (typeof value !== 'object' || value === null || visited.has(value)) {
@@ -24,11 +26,7 @@ function placeholdersAreStrings(ast: unknown, placeholders: Map<string, string>)
       typeof extra?.raw === 'string' &&
       !extra.raw.includes('\\')
     ) {
-      for (const placeholder of remaining) {
-        if (node.value.includes(placeholder)) {
-          remaining.delete(placeholder);
-        }
-      }
+      for (const match of node.value.matchAll(pattern)) remaining.delete(match[0]);
     }
     for (const child of Object.values(node)) {
       visit(child);
@@ -41,12 +39,21 @@ function placeholdersAreStrings(ast: unknown, placeholders: Map<string, string>)
 export async function formatEmbeddedDoc(
   text: string,
   restore: Map<string, string>,
-  parser: 'babel' | 'css',
-  depth: number,
+  language: EmbeddedLanguage,
   options: Options,
   textToDoc: TextToDoc,
-): Promise<string | null> {
+): Promise<Doc | null> {
   try {
+    const { parser } = language;
+    // Mirror Prettier's HTML embed context, not just its language parser. These
+    // internal flags are a version-tested compatibility dependency (3.0+): the
+    // first preserves escaped </script> in nested HTML templates; the second
+    // keeps classic-script identifiers such as `await` from becoming module
+    // expressions. They must reach both validation and the delegated parser.
+    const embeddedOptions: Options & { __embeddedInHtml: boolean; __babelSourceType?: 'script' | 'module' } = {
+      parser, __embeddedInHtml: true,
+      ...(language.parser === 'babel' ? { __babelSourceType: language.sourceType } : {}),
+    };
     // CSS escapes can interact with an unknown value across the substitution
     // boundary. Unlike plain identifiers, they are not safe opaque markers.
     if (parser === 'css' && restore.size > 0 && text.includes('\\')) {
@@ -58,7 +65,7 @@ export async function formatEmbeddedDoc(
       // embed() types options as partial, but Prettier supplies resolved values.
       const ast = await babelParsers.babel.parse(text, {
         ...options,
-        parser: 'babel',
+        ...embeddedOptions,
         originalText: text,
         locStart: babelParsers.babel.locStart,
         locEnd: babelParsers.babel.locEnd,
@@ -70,49 +77,8 @@ export async function formatEmbeddedDoc(
 
     // textToDoc inherits the resolved user options, but resets parent source
     // ranges/cursor state. Do not call format() with a hand-picked option list.
-    let bodyDoc = await textToDoc(text, { parser });
-    bodyDoc = [doc.builders.hardline, bodyDoc];
-    for (let level = 0; level < depth; level += 1) {
-      bodyDoc = doc.builders.indent(bodyDoc);
-    }
-
-    // Use real Doc indentation, including literal-line semantics. The initial
-    // hardline also makes tabWidth count correctly on the body's first line.
-    // Render only this embedded block: the existing outer formatter is still
-    // line-based and does not need a new HTML AST.
-    const printOptions = {
-      printWidth: options.printWidth ?? 80,
-      tabWidth: options.tabWidth ?? 2,
-      useTabs: options.useTabs ?? false,
-    };
-    // Older Prettier 3 versions consume fill.parts while printing. Render a
-    // cloned Doc on each pass, or validation itself can delete later tokens.
-    const render = (value: Doc) => {
-      const copy = doc.utils.mapDoc([value, doc.builders.hardline], (part) => part);
-      return doc.printer.printDocToString(copy, printOptions).formatted.slice(1, -1);
-    };
-    const rendered = render(bodyDoc);
-
-    // Accept neither dropped nor duplicated tokens, even if the delegated
-    // parser/another plugin returned successfully.
-    for (const placeholder of restore.keys()) {
-      if (rendered.split(placeholder).length !== 2) {
-        return null;
-      }
-    }
-    if (restore.size === 0) {
-      return rendered;
-    }
-    // Generated markers contain only letters, digits, underscores, and a
-    // hyphen. One replacement pass cannot rewrite a restored token's contents.
-    const pattern = new RegExp([...restore.keys()].join('|'), 'g');
-    const restoredDoc = doc.utils.mapDoc(bodyDoc, (part) =>
-      typeof part === 'string' ? part.replace(pattern, (placeholder) => restore.get(placeholder)!) : part,
-    );
-    // Restore before making final layout decisions, so even short custom
-    // delimiters or many tokens wrap at their real width, not a marker's width.
-    const restored = render(restoredDoc);
-    return [...restore.keys()].some((placeholder) => restored.includes(placeholder)) ? null : restored;
+    const bodyDoc = await textToDoc(text, embeddedOptions);
+    return restorePlaceholderDoc(bodyDoc, restore);
   } catch {
     return null;
   }

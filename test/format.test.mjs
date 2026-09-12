@@ -118,7 +118,9 @@ test('formats delimiter changes, resets, and custom delimiters inside sections',
 });
 
 test('preserves unmatched tags instead of throwing', async () => {
-  assert.equal(await format('{{#items}}<li>{{name}}</li>'), '{{#items}}<li>{{name}}</li>\n');
+  // Unknown/unclosed source is now preserved including its original EOF.
+  assert.equal(await format('{{#items}}<li>{{name}}</li>'), '{{#items}}<li>{{name}}</li>');
+  assert.equal(await format('{{#items}}<li>{{name}}</li>  \n\n'), '{{#items}}<li>{{name}}</li>  \n\n');
   assert.equal(await format('{{/items}}'), '{{/items}}\n');
 });
 

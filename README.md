@@ -314,12 +314,60 @@ formats as:
 </script>
 ```
 
-Embedded formatting uses Prettier's asynchronous `embed()` hook and Doc
-indentation, so template-literal contents, escaped line continuations, and
-verbatim comments are not given an extra indentation prefix on every pass.
+Opening tags may span multiple lines; their attribute spelling and internal
+whitespace are retained. Source discovery creates ranged raw-element nodes
+with separate body children, alongside outer line and opaque-source segments.
+Each supported raw body uses Prettier's asynchronous `embed()` / `textToDoc()`
+lifecycle. The outer printer composes their Docs, indentation and actual tag
+boundaries into one document; Prettier performs the final rendering. There is
+no intermediate embedded Doc-to-string rendering or newline slicing.
+Template-literal contents, escaped line continuations, and verbatim comments
+are therefore not given an extra indentation prefix on every pass.
 The caller's applicable formatting options are inherited, including
 `singleQuote`, `semi`, `arrowParens`, `tabWidth`, `useTabs`, and `printWidth`.
-Set `embeddedLanguageFormatting: 'off'` to retain the flat fallback output.
+Set `embeddedLanguageFormatting: 'off'` to retain the original raw-body source.
+
+**Intentional change from 0.2.0:** unsupported, disabled, empty or failed
+embeddings preserve the entire body between the opening and closing tags.
+This includes leading/trailing blank lines, indentation, trailing spaces,
+Mustache spelling and the whitespace before the closing tag. Configured line
+endings still apply. The old flat indentation could change multiline JS/CSS
+literal values and raw input observed by Mustache lambdas; it has been removed.
+The closing tag can consequently retain its original indentation on fallback.
+
+Inline/malformed raw-tag shapes are preserved as opaque source regions rather
+than being interpreted as outer HTML. Unterminated raw regions and incomplete
+Mustache input retain their original EOF whitespace too. Comments, preformatted
+and RCDATA/raw-text containers (such as `pre` and `textarea`), and SVG/MathML
+fragments are protected from nested JS/CSS discovery. An HTML
+`<!-- prettier-ignore -->` immediately before a raw element preserves it.
+Whitespace before a protected opening may still receive ordinary outer
+indentation; whitespace inside the protected region is not reindented.
+
+Ordinary outer lines retain the existing formatting policy. Boundary discovery
+is not a complete HTML tree builder: it does not implement browser tree repair,
+full attribute reflow or arbitrary Mustache-generated markup.
+
+Placeholder validation checks every alternative Doc layout before final wrapping,
+not just the branch selected at one width. A custom printer that drops, duplicates
+or splits markers, changes their inventory between alternatives, or uses unsupported
+text-changing Doc commands is conservatively sent to the same fallback. This is
+an intentional safety difference from accepting a Doc based on one rendered layout.
+
+### Editor behavior
+
+Whole-document formatting is the supported operation. Partial `rangeStart` /
+`rangeEnd` selections currently leave the source unchanged in the tested Prettier 3
+versions; this refactor does not introduce syntax-aware range formatting.
+`formatWithCursor()` uses Prettier's generic cursor mapping. Tests characterize
+positions in JS, Mustache tags and following HTML, but this is not a token-aware
+source map or a guarantee for every editor/cursor position. Exact raw-body ranges
+also let the generic mapping preserve cursor positions inside unchanged fallback
+text; tests cover every offset of a representative multiline body.
+
+See [the native Doc design and validation notes](docs/native-docs.md) for details.
+
+### Embedded safety boundaries
 
 Safety and scope:
 
@@ -327,6 +375,9 @@ Safety and scope:
   only for JavaScript-ish types (no `type`, `text/javascript`, `module`,
   `application/javascript`, `text/babel`, or `application/ecmascript`). A
   `src` attribute disables body formatting. Non-JS `lang` values also fall back.
+  Attribute scanning uses HTML's ASCII whitespace rules, not Unicode `\s`.
+  An explicit `type` takes precedence over the legacy `language` attribute;
+  unsupported legacy languages and whitespace-only type values stay opaque.
 - Styles are formatted only with no type or `type="text/css"`, and no language
   or `lang="css"`. Other languages are not sent to the CSS printer.
 - JavaScript placeholders must be proven to occur inside ordinary quoted
@@ -337,16 +388,18 @@ Safety and scope:
   malformed tokens, and interpolated CSS containing escapes also use the
   fallback. Syntax errors or lost/duplicated placeholders do not fail the
   whole file; they leave the body on the same fallback path.
-- The fallback retains the previous flat, indented-but-unformatted behavior;
-  it does not attempt to format the embedded language. Unsupported tag shapes
-  (inline closes, multiline opening tags, or missing closes) follow the legacy
-  HTML formatting path without buffering the following document as raw text.
+- Fallback preserves source instead of attempting to format the embedded
+  language. Raw closing boundaries account for quoted attributes, ASCII tag-name
+  delimiters and script's legacy escaped/double-escaped states. Script bodies
+  using those HTML escape states remain opaque rather than being rewritten by
+  Babel. A complete raw close ends the protected region so following HTML and
+  later supported embeddings can still be formatted.
 
 ## Scope And Non-Goals
 
 - This is a Mustache formatter, not a Mustache renderer.
 - The plugin normalizes Mustache syntax and HTML+Mustache indentation, including nested HTML, multiline tags and attributes, conditional class blocks, partials, comments, tables, void tags, and self-closing tags.
-- The plugin formats embedded CSS/JavaScript inside `<style>`/`<script>` blocks that sit on their own lines (see "Embedded `<script>` and `<style>`" above); other shapes (e.g. a one-line `<script>...</script>`, or a body that isn't valid JS/CSS after Mustache substitution) keep the previous flat formatting.
+- The plugin formats embedded CSS/JavaScript inside `<style>`/`<script>` blocks with dedicated tag boundaries (see above); other shapes (e.g. a one-line `<script>...</script>`, or a body that isn't valid JS/CSS after guarded substitution) preserve their source.
 - Lambda behavior, partial loading, recursive partial expansion, HTML escaping, and context lookup are runtime renderer responsibilities.
 - This package does not claim Handlebars compatibility. Use [`@poliklot/prettier-plugin-handlebars`](https://www.npmjs.com/package/@poliklot/prettier-plugin-handlebars) for classic Handlebars templates.
 - This package does not claim Ember/Glimmer compatibility.
