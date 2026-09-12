@@ -35,8 +35,12 @@ test('print remains synchronous when embedding is disabled', () => {
     { getValue: () => ({ type: 'Program', source }) },
     { embeddedLanguageFormatting: 'off', tabWidth: 2, useTabs: false },
   );
-  assert.equal(typeof printed, 'string');
-  assert.equal(printed, template('script', '  const x={a:1};'));
+  // Native printers return Docs, not necessarily strings. Keep the exact
+  // output assertion while checking the synchronous contract explicitly.
+  assert.equal(typeof printed?.then, 'undefined');
+  assert.equal(prettier.doc.printer.printDocToString(printed, {
+    printWidth: 80, tabWidth: 2, useTabs: false,
+  }).formatted, template('script', '  const x={a:1};'));
 });
 
 test('formats safe dynamic JS property keys without removing quotes', async () => {

@@ -1,6 +1,7 @@
 import type { SourceRange } from 'template-format-core';
 
 export type Node =
+  | SourceSegment
   | Program
   | TextNode
   | MustacheStatement
@@ -14,6 +15,33 @@ export interface Program extends SourceRange {
   type: 'Program';
   body: Node[];
   source?: string;
+  segments?: SourceSegment[];
+}
+
+// Source discovery is deliberately smaller than an HTML AST. Lines retain the
+// existing outer formatting policy; raw bodies are independent embed targets.
+export type SourceSegment = SourceLine | RawTextBody | VerbatimSource;
+
+export interface SourceLine extends SourceRange {
+  type: 'SourceLine';
+  text: string;
+  depth: number;
+  leadingLine: boolean;
+}
+
+export interface RawTextBody extends SourceRange {
+  type: 'RawTextBody';
+  tag: 'script' | 'style';
+  attrsText: string;
+  text: string;
+  depth: number;
+  delimiters: { open: string; close: string };
+  fallback: SourceLine[];
+}
+
+export interface VerbatimSource extends SourceRange {
+  type: 'VerbatimSource';
+  text: string;
 }
 
 export interface TextNode extends SourceRange {

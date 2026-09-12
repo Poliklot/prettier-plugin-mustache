@@ -1,0 +1,340 @@
+[
+  {
+    "name": "empty",
+    "source": "   \n\t\n",
+    "options": {},
+    "expected": ""
+  },
+  {
+    "name": "empty",
+    "source": "   \n\t\n",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": ""
+  },
+  {
+    "name": "empty",
+    "source": "   \n\t\n",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": ""
+  },
+  {
+    "name": "single",
+    "source": "  Hello {{name}}  ",
+    "options": {},
+    "expected": "  Hello {{ name }}\n"
+  },
+  {
+    "name": "single",
+    "source": "  Hello {{name}}  ",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "  Hello {{ name }}\n"
+  },
+  {
+    "name": "single",
+    "source": "  Hello {{name}}  ",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "  Hello {{ name }}\n"
+  },
+  {
+    "name": "boundaries",
+    "source": "\n<div>\n\n<p>{{name}}</p>\n\n</div>\n  \n",
+    "options": {},
+    "expected": "\n<div>\n\n  <p>{{ name }}</p>\n\n</div>\n"
+  },
+  {
+    "name": "boundaries",
+    "source": "\n<div>\n\n<p>{{name}}</p>\n\n</div>\n  \n",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "\n<div>\n\n\t<p>{{ name }}</p>\n\n</div>\n"
+  },
+  {
+    "name": "boundaries",
+    "source": "\n<div>\n\n<p>{{name}}</p>\n\n</div>\n  \n",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "\n<div>\n\n    <p>{{ name }}</p>\n\n</div>\n"
+  },
+  {
+    "name": "unclosed",
+    "source": "  {{#items}}\n\t <p>{{name}}  \n",
+    "options": {},
+    "expected": "  {{#items}}\n\t <p>{{name}}\n"
+  },
+  {
+    "name": "unclosed",
+    "source": "  {{#items}}\n\t <p>{{name}}  \n",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "  {{#items}}\n\t <p>{{name}}\n"
+  },
+  {
+    "name": "unclosed",
+    "source": "  {{#items}}\n\t <p>{{name}}  \n",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "  {{#items}}\n\t <p>{{name}}\n"
+  },
+  {
+    "name": "emptyRaw",
+    "source": "<div>\n<script>\n\n\n</script>\n<style>\n</style>\n</div>",
+    "options": {},
+    "expected": "<div>\n  <script>\n\n\n  </script>\n  <style>\n  </style>\n</div>\n"
+  },
+  {
+    "name": "emptyRaw",
+    "source": "<div>\n<script>\n\n\n</script>\n<style>\n</style>\n</div>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<div>\n\t<script>\n\n\n\t</script>\n\t<style>\n\t</style>\n</div>\n"
+  },
+  {
+    "name": "emptyRaw",
+    "source": "<div>\n<script>\n\n\n</script>\n<style>\n</style>\n</div>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<div>\n    <script>\n\n\n    </script>\n    <style>\n    </style>\n</div>\n"
+  },
+  {
+    "name": "dynamic",
+    "source": "<div>\n{{#items}}\n<script>\nconst result={\"{{key}}\": [\"{{value}}\",\"x\"]};\n</script>\n{{/items}}\n</div>",
+    "options": {},
+    "expected": "<div>\n  {{#items}}\n    <script>\n      const result = { \"{{ key }}\": [\"{{ value }}\", \"x\"] };\n    </script>\n  {{/items}}\n</div>\n"
+  },
+  {
+    "name": "dynamic",
+    "source": "<div>\n{{#items}}\n<script>\nconst result={\"{{key}}\": [\"{{value}}\",\"x\"]};\n</script>\n{{/items}}\n</div>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<div>\n\t{{#items}}\n\t\t<script>\n\t\t\tconst result = {\n\t\t\t\t\"{{ key }}\": [\n\t\t\t\t\t\"{{ value }}\",\n\t\t\t\t\t\"x\",\n\t\t\t\t],\n\t\t\t};\n\t\t</script>\n\t{{/items}}\n</div>\n"
+  },
+  {
+    "name": "dynamic",
+    "source": "<div>\n{{#items}}\n<script>\nconst result={\"{{key}}\": [\"{{value}}\",\"x\"]};\n</script>\n{{/items}}\n</div>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<div>\n    {{#items}}\n        <script>\n            const result={\"{{ key }}\": [\"{{ value }}\",\"x\"]};\n        </script>\n    {{/items}}\n</div>\n"
+  },
+  {
+    "name": "unsupported",
+    "source": "<script type=application/json>\n {\n  \"a\": [1,2]\n }\n</script>\n<p>{{name}}</p>",
+    "options": {},
+    "expected": "<script type=application/json>\n  {\n  \"a\": [1,2]\n  }\n</script>\n<p>{{ name }}</p>\n"
+  },
+  {
+    "name": "unsupported",
+    "source": "<script type=application/json>\n {\n  \"a\": [1,2]\n }\n</script>\n<p>{{name}}</p>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<script type=application/json>\n\t{\n\t\"a\": [1,2]\n\t}\n</script>\n<p>{{ name }}</p>\n"
+  },
+  {
+    "name": "unsupported",
+    "source": "<script type=application/json>\n {\n  \"a\": [1,2]\n }\n</script>\n<p>{{name}}</p>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<script type=application/json>\n    {\n    \"a\": [1,2]\n    }\n</script>\n<p>{{ name }}</p>\n"
+  },
+  {
+    "name": "off",
+    "source": "<div>\n<script>\nfunction f(){\nreturn {a:1};\n}\n</script>\n</div>",
+    "options": {},
+    "expected": "<div>\n  <script>\n    function f() {\n      return { a: 1 };\n    }\n  </script>\n</div>\n"
+  },
+  {
+    "name": "off",
+    "source": "<div>\n<script>\nfunction f(){\nreturn {a:1};\n}\n</script>\n</div>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<div>\n\t<script>\n\t\tfunction f() {\n\t\t\treturn { a: 1 };\n\t\t}\n\t</script>\n</div>\n"
+  },
+  {
+    "name": "off",
+    "source": "<div>\n<script>\nfunction f(){\nreturn {a:1};\n}\n</script>\n</div>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<div>\n    <script>\n        function f(){\n        return {a:1};\n        }\n    </script>\n</div>\n"
+  },
+  {
+    "name": "delimiters",
+    "source": "<script>\n{{=<% %>=}}\nconst x=\"<%value%>\";\n</script>\n<p><%value%></p>\n<style>\na { color:<%color%>; }\n</style>",
+    "options": {},
+    "expected": "<script>\n  {{= <% %> =}}\n  const x=\"<% value %>\";\n</script>\n<p><% value %></p>\n<style>\n  a {\n    color: <% color %>;\n  }\n</style>\n"
+  },
+  {
+    "name": "delimiters",
+    "source": "<script>\n{{=<% %>=}}\nconst x=\"<%value%>\";\n</script>\n<p><%value%></p>\n<style>\na { color:<%color%>; }\n</style>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<script>\n\t{{= <% %> =}}\n\tconst x=\"<% value %>\";\n</script>\n<p><% value %></p>\n<style>\n\ta {\n\t\tcolor: <% color %>;\n\t}\n</style>\n"
+  },
+  {
+    "name": "delimiters",
+    "source": "<script>\n{{=<% %>=}}\nconst x=\"<%value%>\";\n</script>\n<p><%value%></p>\n<style>\na { color:<%color%>; }\n</style>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<script>\n    {{= <% %> =}}\n    const x=\"<% value %>\";\n</script>\n<p><% value %></p>\n<style>\n    a { color:<% color %>; }\n</style>\n"
+  },
+  {
+    "name": "closing",
+    "source": "<script>\nconst x=1;</script>\n<p>{{name}}</p>\n<script>\nconst y={a:1};\n</script>",
+    "options": {},
+    "expected": "<script>\n  const x=1;</script>\n<p>{{ name }}</p>\n<script>\n  const y = { a: 1 };\n</script>\n"
+  },
+  {
+    "name": "closing",
+    "source": "<script>\nconst x=1;</script>\n<p>{{name}}</p>\n<script>\nconst y={a:1};\n</script>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<script>\n\tconst x=1;</script>\n<p>{{ name }}</p>\n<script>\n\tconst y = { a: 1 };\n</script>\n"
+  },
+  {
+    "name": "closing",
+    "source": "<script>\nconst x=1;</script>\n<p>{{name}}</p>\n<script>\nconst y={a:1};\n</script>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<script>\n    const x=1;</script>\n<p>{{ name }}</p>\n<script>\n    const y={a:1};\n</script>\n"
+  },
+  {
+    "name": "literal",
+    "source": "<div>\n<script>\nconst result = `first\n  second\nlast`; // tail\n</script>\n</div>",
+    "options": {},
+    "expected": "<div>\n  <script>\n    const result = `first\n  second\nlast`; // tail\n  </script>\n</div>\n"
+  },
+  {
+    "name": "literal",
+    "source": "<div>\n<script>\nconst result = `first\n  second\nlast`; // tail\n</script>\n</div>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<div>\n\t<script>\n\t\tconst result = `first\n  second\nlast`; // tail\n\t</script>\n</div>\n"
+  },
+  {
+    "name": "literal",
+    "source": "<div>\n<script>\nconst result = `first\n  second\nlast`; // tail\n</script>\n</div>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<div>\n    <script>\n        const result = `first\n        second\n        last`; // tail\n    </script>\n</div>\n"
+  },
+  {
+    "name": "attributes",
+    "source": "<button\nclass=\"\n{{#primary}}\na\n{{/primary}}\n\"\n>\n{{name}}\n</button>",
+    "options": {},
+    "expected": "<button\n  class=\"\n    {{#primary}}\n      a\n    {{/primary}}\n  \"\n>\n  {{ name }}\n</button>\n"
+  },
+  {
+    "name": "attributes",
+    "source": "<button\nclass=\"\n{{#primary}}\na\n{{/primary}}\n\"\n>\n{{name}}\n</button>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<button\n\tclass=\"\n\t\t{{#primary}}\n\t\t\ta\n\t\t{{/primary}}\n\t\"\n>\n\t{{ name }}\n</button>\n"
+  },
+  {
+    "name": "attributes",
+    "source": "<button\nclass=\"\n{{#primary}}\na\n{{/primary}}\n\"\n>\n{{name}}\n</button>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<button\n    class=\"\n        {{#primary}}\n            a\n        {{/primary}}\n    \"\n>\n    {{ name }}\n</button>\n"
+  },
+  {
+    "name": "css",
+    "source": "<div>\n<style>\n.{{class}}{ {{property}}:{{color}};width:calc(({{expr}})*2); }\n</style>\n</div>",
+    "options": {},
+    "expected": "<div>\n  <style>\n    .{{ class }} {\n      {{ property }}: {{ color }};\n      width: calc(({{ expr }}) * 2);\n    }\n  </style>\n</div>\n"
+  },
+  {
+    "name": "css",
+    "source": "<div>\n<style>\n.{{class}}{ {{property}}:{{color}};width:calc(({{expr}})*2); }\n</style>\n</div>",
+    "options": {
+      "useTabs": true,
+      "tabWidth": 4,
+      "printWidth": 30
+    },
+    "expected": "<div>\n\t<style>\n\t\t.{{ class }} {\n\t\t\t{{ property }}: {{ color }};\n\t\t\twidth: calc(\n\t\t\t\t({{ expr }}) *\n\t\t\t\t\t2\n\t\t\t);\n\t\t}\n\t</style>\n</div>\n"
+  },
+  {
+    "name": "css",
+    "source": "<div>\n<style>\n.{{class}}{ {{property}}:{{color}};width:calc(({{expr}})*2); }\n</style>\n</div>",
+    "options": {
+      "tabWidth": 4,
+      "printWidth": 100,
+      "embeddedLanguageFormatting": "off"
+    },
+    "expected": "<div>\n    <style>\n        .{{ class }}{ {{ property }}:{{ color }};width:calc(({{ expr }})*2); }\n    </style>\n</div>\n"
+  }
+]

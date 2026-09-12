@@ -22,8 +22,18 @@ jobs:
       - run: npm run check
       - run: npm run pack:check
       - run: npm run smoke:install
+        env:
+          MUSTACHE_SMOKE_FULL_TESTS: '1'
       - name: Check minimum supported Prettier version
-        if: matrix.node-version == 18
         run: npm run smoke:install
         env:
           MUSTACHE_SMOKE_PRETTIER_VERSION: 3.0.0
+          MUSTACHE_SMOKE_FULL_TESTS: '1'
+      - name: Check representative Prettier 3 releases
+        if: matrix.node-version == 18
+        run: |
+          for version in 3.3.3 3.6.2; do
+            MUSTACHE_SMOKE_PRETTIER_VERSION="$version" npm run smoke:install
+          done
+        env:
+          MUSTACHE_SMOKE_FULL_TESTS: '1'

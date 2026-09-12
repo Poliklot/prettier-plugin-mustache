@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Refactoring
+
+* Compose ranged Mustache/HTML source segments and child JS/CSS embeddings as one
+  native Prettier Doc. Remove intermediate rendering, artificial newline slicing,
+  and cloning required solely by intermediate Prettier 3.0 printing.
+* Validate placeholder occurrences across alternative layouts before restoration
+  and final wrapping. Unsafe custom-printer alternatives now select the existing
+  fallback instead of being accepted based on one rendered branch.
+
+### Compatibility
+
+* Retain the existing outer formatting and flat fallback policy, supported syntax,
+  caller options/plugin precedence, Node 18+ and Prettier 3.0+ minimums.
+* Characterize cursor mapping and the existing partial-range no-op; no new
+  syntax-aware editor range-formatting support is claimed.
+
 ## [0.2.0](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.6...prettier-plugin-mustache-v0.2.0) (2026-09-11)
 
 

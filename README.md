@@ -314,12 +314,41 @@ formats as:
 </script>
 ```
 
-Embedded formatting uses Prettier's asynchronous `embed()` hook and Doc
-indentation, so template-literal contents, escaped line continuations, and
-verbatim comments are not given an extra indentation prefix on every pass.
+Source discovery creates ranged line segments and separate raw-body nodes.
+Each supported raw body uses Prettier's asynchronous `embed()` / `textToDoc()`
+lifecycle. The outer printer composes their Docs, indentation and actual tag
+boundaries into one document; Prettier performs the final rendering. There is
+no intermediate embedded Doc-to-string rendering or newline slicing.
+Template-literal contents, escaped line continuations, and verbatim comments
+are therefore not given an extra indentation prefix on every pass.
 The caller's applicable formatting options are inherited, including
 `singleQuote`, `semi`, `arrowParens`, `tabWidth`, `useTabs`, and `printWidth`.
 Set `embeddedLanguageFormatting: 'off'` to retain the flat fallback output.
+
+The outer Mustache/HTML whitespace policy and the supported syntax are unchanged
+by this architectural refactor. Unsupported bodies still use **flat indentation**:
+nonblank lines are trimmed, their Mustache spelling is normalized, and each is
+indented one level inside the tag. This is not a semantics-preserving formatter
+for arbitrary generated programs or whitespace-sensitive literal contents.
+
+Placeholder validation checks every alternative Doc layout before final wrapping,
+not just the branch selected at one width. A custom printer that drops, duplicates
+or splits markers, changes their inventory between alternatives, or uses unsupported
+text-changing Doc commands is conservatively sent to the same fallback. This is
+an intentional safety difference from accepting a Doc based on one rendered layout.
+
+### Editor behavior
+
+Whole-document formatting is the supported operation. Partial `rangeStart` /
+`rangeEnd` selections currently leave the source unchanged in the tested Prettier 3
+versions; this refactor does not introduce syntax-aware range formatting.
+`formatWithCursor()` uses Prettier's generic cursor mapping. Tests characterize
+positions in JS, Mustache tags and following HTML, but this is not a token-aware
+source map or a guarantee for every editor/cursor position.
+
+See [the native Doc design and validation notes](docs/native-docs.md) for details.
+
+### Embedded safety boundaries
 
 Safety and scope:
 

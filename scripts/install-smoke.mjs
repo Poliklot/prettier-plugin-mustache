@@ -79,4 +79,15 @@ const format = (source, options = {}) => prettier.format(source, { filepath: 'sa
 `;
 
 run(process.execPath, ['-e', verify], { cwd: projectRoot, stdio: 'inherit' });
+if (process.env.MUSTACHE_SMOKE_FULL_TESTS === '1') {
+  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', `mustache@${manifest.devDependencies.mustache}`], {
+    cwd: projectRoot, stdio: 'inherit',
+  });
+  const installedRoot = path.join(projectRoot, 'node_modules', manifest.name);
+  fs.cpSync(path.join(repoRoot, 'test'), path.join(installedRoot, 'test'), { recursive: true });
+  const tests = fs.readdirSync(path.join(installedRoot, 'test'))
+    .filter((name) => name.endsWith('.test.mjs')).map((name) => path.join('test', name));
+  run(process.execPath, ['--test', ...tests], { cwd: installedRoot, stdio: 'inherit' });
+}
 console.log(`Install smoke passed with prettier@${prettierVersion}.`);
