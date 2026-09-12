@@ -1,3 +1,4 @@
+import { createPlaceholderPlan } from 'template-format-core/embedding/placeholders';
 import { isTemplateExpressionQuoteStart, parseTemplateExpression, voidElements, withRange } from 'template-format-core';
 import { discoverProtectedRegions } from './raw-regions';
 import type { SourceLine, SourceSegment } from './types';
@@ -9,15 +10,8 @@ interface Delimiters {
 
 type RawTextTag = 'script' | 'style';
 
-export type EmbeddedLanguage =
-  | { parser: 'babel'; sourceType: 'script' | 'module' }
-  | { parser: 'css' };
-
-// Script types whose body is still plain JavaScript. Anything else (JSON
-// islands, other templating languages sharing the file, etc.) is left to the
-// source-preserving fallback rather than risking a confidently wrong
-// reformat.
-const JS_SCRIPT_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module', 'text/babel', 'application/ecmascript']);
+export { resolveEmbeddedLanguage } from 'template-format-core/html/embedded-language';
+export type { EmbeddedLanguage } from 'template-format-core/html/embedded-language';
 
 type TemplateTokenKind = 'mustache' | 'partial' | 'comment' | 'sectionStart' | 'sectionEnd' | 'delimiter';
 
@@ -271,98 +265,6 @@ export function discoverSource(source: string): SourceSegment[] {
   return output;
 }
 
-function normalizeAttributeValue(value: string): string {
-  // HTML trims only these five ASCII characters, not all String#trim whitespace.
-  // Scan each edge once: an unanchored whitespace+$ regexp retries at every
-  // interior whitespace position and can take quadratic time on library input.
-  const whitespace = '\t\n\f\r ';
-  let start = 0;
-  let end = value.length;
-  while (start < end && whitespace.includes(value[start])) start += 1;
-  while (end > start && whitespace.includes(value[end - 1])) end -= 1;
-  return value.slice(start, end).toLowerCase();
-}
-
-export function resolveEmbeddedLanguage(tag: RawTextTag, attrsText: string): EmbeddedLanguage | null {
-  const attributes = parseRawTextAttributes(attrsText);
-  if (!attributes) {
-    return null;
-  }
-
-  const rawType = attributes.get('type');
-  const language = attributes.get('language') ?? '';
-  const type = rawType === undefined && tag === 'script' && language !== ''
-    ? `text/${language.toLowerCase()}` : normalizeAttributeValue(rawType ?? '');
-  const lang = normalizeAttributeValue(attributes.get('lang') ?? '');
-  // Empty type defaults to JS, but a nonempty whitespace-only type does not.
-  // A legacy language attribute only applies when type is absent.
-  // https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element
-  if (rawType !== undefined && rawType !== '' && type === '') return null;
-  if (tag === 'style') {
-    return (!type || type === 'text/css') && (!lang || lang === 'css') ? { parser: 'css' } : null;
-  }
-  if (attributes.has('src') || (lang && !['js', 'javascript'].includes(lang))) {
-    return null;
-  }
-  if (!JS_SCRIPT_TYPES.has(type)) return null;
-  return { parser: 'babel', sourceType: type === 'module' ||
-    (type === 'text/babel' && attributes.get('data-type') === 'module') ? 'module' : 'script' };
-}
-
-function parseRawTextAttributes(text: string): Map<string, string> | null {
-  const attributes = new Map<string, string>();
-  let position = 0;
-  while (position < text.length) {
-    const whitespace = text.slice(position).match(/^[\t\n\f\r ]+/);
-    if (!whitespace) {
-      return null;
-    }
-    position += whitespace[0].length;
-    if (position === text.length) {
-      break;
-    }
-
-    const nameMatch = text.slice(position).match(/^[^\t\n\f\r =/<>"'`]+/);
-    if (!nameMatch) {
-      return null;
-    }
-    const name = nameMatch[0].toLowerCase();
-    position += nameMatch[0].length;
-    const afterName = position;
-    position += text.slice(position).match(/^[\t\n\f\r ]*/)?.[0].length ?? 0;
-
-    let value = '';
-    if (text[position] === '=') {
-      position += 1;
-      position += text.slice(position).match(/^[\t\n\f\r ]*/)?.[0].length ?? 0;
-      const quote = text[position];
-      if (quote === '"' || quote === "'") {
-        const end = text.indexOf(quote, position + 1);
-        if (end === -1) {
-          return null;
-        }
-        value = text.slice(position + 1, end);
-        position = end + 1;
-      } else {
-        const valueMatch = text.slice(position).match(/^[^\t\n\f\r <>"'`=]+/);
-        if (!valueMatch) {
-          return null;
-        }
-        value = valueMatch[0];
-        position += value.length;
-      }
-    } else {
-      // Leave the separator for the next attribute to consume.
-      position = afterName;
-    }
-    // HTML uses the first occurrence of a duplicate attribute.
-    if (!attributes.has(name)) {
-      attributes.set(name, value);
-    }
-  }
-  return attributes;
-}
-
 export function extractMustachePlaceholders(
   text: string,
   delimiters: Delimiters,
@@ -388,26 +290,7 @@ export function extractMustachePlaceholders(
     position = token.end;
   }
 
-  // Check both the input and normalized replacements. Lowercase markers without
-  // a leading underscore survive CSS normalization; a hyphen keeps dynamic JS keys
-  // quoted even with quoteProps: 'as-needed'. Keep widths close to real tokens.
-  const reserved = (text + tokens.map(({ replacement }) => replacement).join('')).toLowerCase();
-  let salt = 0;
-  while (reserved.includes(`m${salt}_`)) {
-    salt += 1;
-  }
-  const restore = new Map<string, string>();
-  const parts: string[] = [];
-  position = 0;
-  for (const [index, { token, replacement }] of tokens.entries()) {
-    const prefix = `m${salt}_${index.toString(36)}-`;
-    const placeholder = `${prefix}${'x'.repeat(Math.max(replacement.length - prefix.length - 1, 0))}z`;
-    parts.push(text.slice(position, token.start), placeholder);
-    restore.set(placeholder, replacement);
-    position = token.end;
-  }
-  parts.push(text.slice(position));
-  return { text: parts.join(''), restore };
+  return createPlaceholderPlan(text, tokens.map(({ token, replacement }) => ({ start: token.start, end: token.end, replacement })));
 }
 
 function createDefaultDelimiters(): Delimiters {

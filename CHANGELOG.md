@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Shared embedded-language safety
+
+* Consume shared placeholder/Doc validation and HTML context from `template-format-core`, retaining this plugin's own AST and dialect.
+* See `docs/shared-embedding.md` and Poliklot/template-format-core#2 for the coordinated dependency and release gates.
+
 ## [0.2.1](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.2.0...prettier-plugin-mustache-v0.2.1) (2026-09-12)
 
 ### Refactoring

@@ -48,10 +48,10 @@
     "corpus:oss": "node scripts/run-oss-corpus-check.mjs",
     "pack:check": "npm pack --dry-run",
     "smoke:install": "node scripts/install-smoke.mjs",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "node scripts/check-core-release.mjs && npm run check"
   },
   "dependencies": {
-    "template-format-core": "^0.1.1"
+    "template-format-core": "git+https://github.com/Poliklot/template-format-core.git#a4c907e5f69edf1444d57caa2c690650e5d197ff"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",
