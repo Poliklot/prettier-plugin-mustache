@@ -39,6 +39,15 @@
 * Characterize cursor mapping and the existing partial-range no-op; no new
   syntax-aware editor range-formatting support is claimed.
 
+## [0.2.1](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.2.0...prettier-plugin-mustache-v0.2.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* normalize HTML attribute whitespace in linear time ([9a46ef8](https://github.com/Poliklot/prettier-plugin-mustache/commit/9a46ef832d64904cb5c52ac5b7cfb2acf2fcd465))
+* preserve embedded HTML context and raw tag boundaries ([466dd40](https://github.com/Poliklot/prettier-plugin-mustache/commit/466dd40748a62bcdcb9ecc2ef3dbcbb75c8c176b))
+* preserve raw source and harden embedded HTML boundaries ([191cf29](https://github.com/Poliklot/prettier-plugin-mustache/commit/191cf293ba6098c122268fe9eba4fe527e97bbfd))
+
 ## [0.2.0](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.1.6...prettier-plugin-mustache-v0.2.0) (2026-09-11)
 
 
