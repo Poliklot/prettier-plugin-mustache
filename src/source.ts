@@ -271,20 +271,29 @@ export function discoverSource(source: string): SourceSegment[] {
   return output;
 }
 
+function normalizeAttributeValue(value: string): string {
+  // HTML trims only these five ASCII characters, not all String#trim whitespace.
+  // Scan each edge once: an unanchored whitespace+$ regexp retries at every
+  // interior whitespace position and can take quadratic time on library input.
+  const whitespace = '\t\n\f\r ';
+  let start = 0;
+  let end = value.length;
+  while (start < end && whitespace.includes(value[start])) start += 1;
+  while (end > start && whitespace.includes(value[end - 1])) end -= 1;
+  return value.slice(start, end).toLowerCase();
+}
+
 export function resolveEmbeddedLanguage(tag: RawTextTag, attrsText: string): EmbeddedLanguage | null {
   const attributes = parseRawTextAttributes(attrsText);
   if (!attributes) {
     return null;
   }
 
-  // HTML trims ASCII whitespace, not every Unicode character matched by \s.
-  // Treating NBSP as a separator could turn an opaque data type into JavaScript.
-  const trimAttribute = (value: string) => value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').toLowerCase();
   const rawType = attributes.get('type');
   const language = attributes.get('language') ?? '';
   const type = rawType === undefined && tag === 'script' && language !== ''
-    ? `text/${language.toLowerCase()}` : trimAttribute(rawType ?? '');
-  const lang = trimAttribute(attributes.get('lang') ?? '');
+    ? `text/${language.toLowerCase()}` : normalizeAttributeValue(rawType ?? '');
+  const lang = normalizeAttributeValue(attributes.get('lang') ?? '');
   // Empty type defaults to JS, but a nonempty whitespace-only type does not.
   // A legacy language attribute only applies when type is absent.
   // https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element

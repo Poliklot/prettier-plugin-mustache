@@ -28,6 +28,9 @@
 * Forward the same HTML/source-type context as Prettier's HTML printer: preserve
   escaped closing tags in nested HTML templates and classic-script `await`
   identifiers instead of reinterpreting them as module expressions.
+* Normalize script/style `type` and `lang` whitespace in linear time, avoiding
+  quadratic regular-expression backtracking on long attribute values while
+  retaining HTML's ASCII-only whitespace rules.
 
 ### Compatibility
 
