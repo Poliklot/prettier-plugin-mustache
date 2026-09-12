@@ -8,13 +8,25 @@
   native Prettier Doc. Remove intermediate rendering, artificial newline slicing,
   and cloning required solely by intermediate Prettier 3.0 printing.
 * Validate placeholder occurrences across alternative layouts before restoration
-  and final wrapping. Unsafe custom-printer alternatives now select the existing
+  and final wrapping. Unsafe custom-printer alternatives now select the source
   fallback instead of being accepted based on one rendered branch.
+
+### Correctness and intentional output changes
+
+* Preserve original raw-body whitespace and Mustache spelling when embedding is
+  disabled, unsupported, empty or fails validation. Replace the old flat fallback
+  that could change multiline literal values and Mustache lambda input.
+* Preserve incomplete/unclosed source including EOF whitespace. Treat inline or
+  malformed raw-tag shapes as opaque regions, without consuming following HTML
+  past a complete raw close.
+* Discover ranged raw elements with child body nodes, including multiline opening
+  tags. Protect comments, whitespace-sensitive containers, SVG/MathML fragments,
+  ignored raw elements and script's HTML escaped/double-escaped forms.
 
 ### Compatibility
 
-* Retain the existing outer formatting and flat fallback policy, supported syntax,
-  caller options/plugin precedence, Node 18+ and Prettier 3.0+ minimums.
+* Retain ordinary outer-line formatting, Mustache grammar, caller options/plugin
+  precedence, Node 18+ and Prettier 3.0+ minimums; no dependencies were added.
 * Characterize cursor mapping and the existing partial-range no-op; no new
   syntax-aware editor range-formatting support is claimed.
 

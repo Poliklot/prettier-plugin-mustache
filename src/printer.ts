@@ -1,8 +1,8 @@
 import { doc } from 'prettier';
-import type { Doc, Printer } from 'prettier';
+import type { AstPath, Doc, Printer } from 'prettier';
 import { formatEmbeddedDoc } from './embedded';
 import { discoverSource, extractMustachePlaceholders, resolveEmbeddedParser } from './source';
-import type { Node, SourceSegment } from './types';
+import type { Node, RawTextElement, SourceSegment } from './types';
 
 const { hardline, indent, join, literalline } = doc.builders;
 
@@ -16,7 +16,15 @@ function printFallback(node: SourceSegment): Doc {
     case 'SourceLine':
       return atDepth([node.leadingLine ? hardline : '', node.text], node.depth);
     case 'RawTextBody':
-      return node.fallback.map(printFallback);
+      return join(literalline, node.text.split('\n'));
+    case 'RawTextElement':
+      return [atDepth([node.leadingLine ? hardline : '', join(literalline, node.opening.split('\n'))], node.depth),
+        printFallback(node.body), node.closing];
+    case 'OpaqueSource':
+      return node.depth === undefined
+        ? [node.leadingLine ? literalline : '', join(literalline, node.text.split('\n'))]
+        : atDepth([node.leadingLine ? hardline : '',
+          join(literalline, node.text.replace(/^[\t ]*/, '').split('\n'))], node.depth);
     case 'VerbatimSource':
       return join(literalline, node.text.split('\n'));
   }
@@ -26,7 +34,7 @@ export const printer: Printer<Node> = {
   getVisitorKeys(node) {
     // The syntax AST remains available to consumers. Embedding/printing visit
     // only source segments, never a second copy of the same Mustache content.
-    return node.type === 'Program' ? ['segments'] : [];
+    return node.type === 'Program' ? ['segments'] : node.type === 'RawTextElement' ? ['body'] : [];
   },
   embed(path, options) {
     const node = path.node;
@@ -40,7 +48,10 @@ export const printer: Printer<Node> = {
       const contents = await formatEmbeddedDoc(extracted.text, extracted.restore, parser, options, textToDoc);
       // This hardline is the actual opening-tag/body boundary, not a sentinel
       // for a private renderer. Literal lines and suffix comments remain Docs.
-      return contents === null ? printFallback(node) : atDepth([hardline, contents], node.depth);
+      return contents === null ? printFallback(node) : [
+        atDepth([hardline, contents], node.depth),
+        atDepth(hardline, node.depth - 1),
+      ];
     };
   },
   print(path, _options, print): Doc {
@@ -51,9 +62,15 @@ export const printer: Printer<Node> = {
       if (!segments.length) return '';
       // The fallback also supports direct synchronous printer calls. Normal
       // Prettier calls use path.map so child embed Docs are composed unchanged.
-      return [node.segments ? path.map(print, 'segments') : segments.map(printFallback), hardline];
+      const last = segments[segments.length - 1];
+      return [node.segments ? path.map(print, 'segments') : segments.map(printFallback),
+        last.type === 'VerbatimSource' || (last.type === 'OpaqueSource' && last.terminal) ? '' : hardline];
     }
-    if (node.type === 'SourceLine' || node.type === 'RawTextBody' || node.type === 'VerbatimSource') {
+    if (node.type === 'RawTextElement') {
+      return [atDepth([node.leadingLine ? hardline : '', join(literalline, node.opening.split('\n'))], node.depth),
+        (path as AstPath<RawTextElement>).call(print, 'body'), node.closing];
+    }
+    if (node.type === 'SourceLine' || node.type === 'RawTextBody' || node.type === 'OpaqueSource' || node.type === 'VerbatimSource') {
       return printFallback(node);
     }
     return '';

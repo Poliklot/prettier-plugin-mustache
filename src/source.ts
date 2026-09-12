@@ -1,4 +1,5 @@
 import { isTemplateExpressionQuoteStart, parseTemplateExpression, voidElements, withRange } from 'template-format-core';
+import { discoverProtectedRegions } from './raw-regions';
 import type { SourceLine, SourceSegment } from './types';
 
 interface Delimiters {
@@ -10,17 +11,9 @@ type RawTextTag = 'script' | 'style';
 
 // Script types whose body is still plain JavaScript. Anything else (JSON
 // islands, other templating languages sharing the file, etc.) is left to the
-// existing flat-indent fallback rather than risking a confidently wrong
+// source-preserving fallback rather than risking a confidently wrong
 // reformat.
 const JS_SCRIPT_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module', 'text/babel', 'application/ecmascript']);
-
-interface PendingRawTextElement {
-  tag: RawTextTag;
-  baseDepth: number;
-  attrsText: string;
-  lines: string[];
-  firstLine: number;
-}
 
 type TemplateTokenKind = 'mustache' | 'partial' | 'comment' | 'sectionStart' | 'sectionEnd' | 'delimiter';
 
@@ -58,27 +51,26 @@ export function discoverSource(source: string): SourceSegment[] {
     return [];
   }
 
-  if (hasUnclosedSection(normalized)) {
-    return [withRange({ type: 'VerbatimSource', text: normalized.trimEnd() }, 0, normalized.length)];
+  const scanned = scanTemplateTokens(normalized, createDefaultDelimiters());
+  if (!scanned.complete || hasUnclosedSection(scanned.tokens)) {
+    return [withRange({ type: 'VerbatimSource', text: normalized }, 0, normalized.length)];
   }
 
   const withoutFinalNewline = normalized.replace(/\n+$/g, '');
   const lines = withoutFinalNewline.split('\n');
+  const protectedRegions = discoverProtectedRegions(normalized, scanned.tokens);
 
-  if (lines.length === 1) {
+  if (lines.length === 1 && !protectedRegions.length) {
     const delimiters = createDefaultDelimiters();
     const formatted = normalizeMustacheInText(lines[0].replace(/[ \t]+$/g, ''), delimiters).text.trimEnd();
     return formatted.length > 0 ? [withRange({ type: 'SourceLine', text: formatted, depth: 0, leadingLine: false }, 0, lines[0].length)] : [];
   }
-
-  const rawTextCloseLines = findRawTextCloseLines(lines);
 
   const state = {
     depth: 0,
     delimiters: createDefaultDelimiters(),
     pendingOpenTag: undefined as PendingOpenTag | undefined,
     pendingAttributeValue: undefined as PendingAttributeValue | undefined,
-    rawTextElement: undefined as PendingRawTextElement | undefined,
   };
   const output: SourceSegment[] = [];
   const offsets: number[] = [];
@@ -92,33 +84,77 @@ export function discoverSource(source: string): SourceSegment[] {
   const pushLine = (text: string, depth: number, index: number) =>
     output.push(lineNode(text, depth, index, output.length > 0));
 
+  function lineAt(position: number): number {
+    let low = 0;
+    let high = offsets.length;
+    while (low + 1 < high) {
+      const middle = (low + high) >>> 1;
+      if (offsets[middle] <= position) low = middle;
+      else high = middle;
+    }
+    return low;
+  }
+  let regionIndex = 0;
+
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const rawLine = lines[lineIndex];
     const rawTrimmed = rawLine.trim();
 
-    if (state.rawTextElement) {
-      if (matchesRawTextCloseTag(rawTrimmed, state.rawTextElement.tag)) {
-        const element = state.rawTextElement;
-        const delimiters = cloneDelimiters(state.delimiters);
-        // Discover fallback now, so delimiter changes affect subsequent source
-        // regions regardless of whether embed later succeeds or is disabled.
-        const fallback = element.lines.map((line, index) => lineNode(
-          normalizeMustacheInText(line.trim(), state.delimiters).text.trim(),
-          element.baseDepth + 1,
-          element.firstLine + index,
-        ));
-        const text = element.lines.join('\n');
-        output.push(withRange({
-          type: 'RawTextBody', tag: element.tag, attrsText: element.attrsText,
-          text, depth: element.baseDepth + 1, delimiters, fallback,
-        }, offsets[element.firstLine], offsets[element.firstLine] + text.length));
-        pushLine(rawTrimmed, element.baseDepth, lineIndex);
-        state.depth = state.rawTextElement.baseDepth;
-        state.rawTextElement = undefined;
-        continue;
+    const region = protectedRegions[regionIndex];
+    if (region && lineAt(region.start) === lineIndex) {
+      let last = region;
+      const regions = [region];
+      regionIndex += 1;
+      // Several protected elements sharing a physical line are one opaque
+      // source region; do not invent whitespace between inline elements.
+      while (protectedRegions[regionIndex] && lineAt(protectedRegions[regionIndex].start) <= lineAt(last.end - 1)) {
+        last = protectedRegions[regionIndex++];
+        regions.push(last);
       }
-
-      state.rawTextElement.lines.push(rawLine);
+      const lastLine = lineAt(last.end - 1);
+      const endOfLine = offsets[lastLine] + lines[lastLine].length;
+      const standalone = regions.length === 1 && region.embeddable &&
+        !normalized.slice(offsets[lineIndex], region.start).trim() &&
+        !normalized.slice(region.openEnd, offsets[lineAt(region.openEnd!)] + lines[lineAt(region.openEnd!)].length).trim() &&
+        lineAt(region.closeStart!) > lineAt(region.openEnd!) &&
+        !normalized.slice(offsets[lineAt(region.closeStart!)], region.closeStart).trim() &&
+        !normalized.slice(region.end, endOfLine).trim();
+      if (standalone) {
+        const opening = normalized.slice(region.start, region.openEnd);
+        // Attribute delimiter changes affect the body, body changes affect
+        // following HTML. Never normalize opaque text to advance this state.
+        scanTemplateTokens(opening, state.delimiters);
+        const delimiters = cloneDelimiters(state.delimiters);
+        const text = normalized.slice(region.openEnd, region.closeStart);
+        scanTemplateTokens(text, state.delimiters);
+        output.push(withRange({
+          type: 'RawTextElement', opening, closing: normalized.slice(region.closeStart, region.end),
+          depth: state.depth, leadingLine: output.length > 0,
+          body: withRange({ type: 'RawTextBody', tag: region.tag as RawTextTag,
+            attrsText: region.attrsText!, text, depth: state.depth + 1, delimiters }, region.openEnd!, region.closeStart!),
+        }, region.start, region.end));
+      } else {
+        const terminal = Boolean(last.terminal);
+        const end = terminal ? normalized.length : endOfLine;
+        const text = normalized.slice(offsets[lineIndex], end);
+        scanTemplateTokens(text, state.delimiters);
+        // Only the surrounding HTML contributes to structural depth. Tags in
+        // a string, comment, textarea, pre or foreign fragment are not children.
+        let previous = offsets[lineIndex];
+        const exterior = regions.map((item) => {
+          const part = normalized.slice(previous, item.start);
+          previous = item.end;
+          return part;
+        }).join('') + normalized.slice(previous, end);
+        // The whitespace before a standalone protected opening is outside its
+        // content. Keep normal outer indentation there, not inside raw text.
+        const canIndent = !normalized.slice(offsets[lineIndex], region.start).trim() ||
+          (!terminal && lineIndex === lastLine);
+        const depth = canIndent ? Math.max(0, state.depth - countLeadingHtmlCloseTags(exterior.trimStart())) : undefined;
+        output.push(withRange({ type: 'OpaqueSource', text, leadingLine: output.length > 0, terminal, depth }, offsets[lineIndex], end));
+        state.depth = Math.max(0, state.depth + getHtmlDepthDelta(exterior, 0));
+      }
+      lineIndex = lastLine;
       continue;
     }
 
@@ -221,19 +257,6 @@ export function discoverSource(source: string): SourceSegment[] {
       continue;
     }
 
-    const rawTextOpenTag = matchRawTextOpenTag(normalizedLine);
-    const closeLine = rawTextOpenTag ? rawTextCloseLines[rawTextOpenTag.tag][lineIndex] : -1;
-    if (rawTextOpenTag && closeLine >= 0 && matchesRawTextCloseTag(lines[closeLine].trim(), rawTextOpenTag.tag)) {
-      state.rawTextElement = {
-        tag: rawTextOpenTag.tag,
-        baseDepth: indentDepth,
-        attrsText: rawTextOpenTag.attrsText,
-        lines: [],
-        firstLine: lineIndex + 1,
-      };
-      continue;
-    }
-
     const htmlDepthDelta = getHtmlDepthDelta(normalizedLine, leadingCloseCount);
     state.depth = Math.max(0, state.depth + htmlDepthDelta);
   }
@@ -250,8 +273,18 @@ export function resolveEmbeddedParser(tag: RawTextTag, attrsText: string): 'babe
     return null;
   }
 
-  const type = (attributes.get('type') ?? '').trim().toLowerCase();
-  const lang = (attributes.get('lang') ?? '').trim().toLowerCase();
+  // HTML trims ASCII whitespace, not every Unicode character matched by \s.
+  // Treating NBSP as a separator could turn an opaque data type into JavaScript.
+  const trimAttribute = (value: string) => value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').toLowerCase();
+  const rawType = attributes.get('type');
+  const language = attributes.get('language') ?? '';
+  const type = rawType === undefined && tag === 'script' && language !== ''
+    ? `text/${language.toLowerCase()}` : trimAttribute(rawType ?? '');
+  const lang = trimAttribute(attributes.get('lang') ?? '');
+  // Empty type defaults to JS, but a nonempty whitespace-only type does not.
+  // A legacy language attribute only applies when type is absent.
+  // https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element
+  if (rawType !== undefined && rawType !== '' && type === '') return null;
   if (tag === 'style') {
     return (!type || type === 'text/css') && (!lang || lang === 'css') ? 'css' : null;
   }
@@ -265,7 +298,7 @@ function parseRawTextAttributes(text: string): Map<string, string> | null {
   const attributes = new Map<string, string>();
   let position = 0;
   while (position < text.length) {
-    const whitespace = text.slice(position).match(/^\s+/);
+    const whitespace = text.slice(position).match(/^[\t\n\f\r ]+/);
     if (!whitespace) {
       return null;
     }
@@ -274,19 +307,19 @@ function parseRawTextAttributes(text: string): Map<string, string> | null {
       break;
     }
 
-    const nameMatch = text.slice(position).match(/^[^\s=/<>"'`]+/);
+    const nameMatch = text.slice(position).match(/^[^\t\n\f\r =/<>"'`]+/);
     if (!nameMatch) {
       return null;
     }
     const name = nameMatch[0].toLowerCase();
     position += nameMatch[0].length;
     const afterName = position;
-    position += text.slice(position).match(/^\s*/)?.[0].length ?? 0;
+    position += text.slice(position).match(/^[\t\n\f\r ]*/)?.[0].length ?? 0;
 
     let value = '';
     if (text[position] === '=') {
       position += 1;
-      position += text.slice(position).match(/^\s*/)?.[0].length ?? 0;
+      position += text.slice(position).match(/^[\t\n\f\r ]*/)?.[0].length ?? 0;
       const quote = text[position];
       if (quote === '"' || quote === "'") {
         const end = text.indexOf(quote, position + 1);
@@ -296,7 +329,7 @@ function parseRawTextAttributes(text: string): Map<string, string> | null {
         value = text.slice(position + 1, end);
         position = end + 1;
       } else {
-        const valueMatch = text.slice(position).match(/^[^\s<>"'`=]+/);
+        const valueMatch = text.slice(position).match(/^[^\t\n\f\r <>"'`=]+/);
         if (!valueMatch) {
           return null;
         }
@@ -313,36 +346,6 @@ function parseRawTextAttributes(text: string): Map<string, string> | null {
     }
   }
   return attributes;
-}
-
-function matchRawTextOpenTag(line: string): { tag: RawTextTag; attrsText: string } | null {
-  const match = line.match(/^<(script|style)(\s[\s\S]*|)>$/i);
-  if (!match || /\/\s*$/.test(match[2]) || !parseRawTextAttributes(match[2])) {
-    return null;
-  }
-  return { tag: match[1].toLowerCase() as RawTextTag, attrsText: match[2] };
-}
-
-function matchesRawTextCloseTag(line: string, tag: RawTextTag): boolean {
-  return new RegExp(`^<\\/${tag}\\s*>$`, 'i').test(line);
-}
-
-function findRawTextCloseLines(lines: string[]): Record<RawTextTag, number[]> {
-  const result: Record<RawTextTag, number[]> = { script: [], style: [] };
-  for (const tag of ['script', 'style'] as const) {
-    const close = new RegExp(`<\\/${tag}(?=[\\s/>])`, 'i');
-    let next = -1;
-    // Cache the first later close in linear time, including unsupported inline
-    // closes. They terminate HTML raw text even when inside a JS string, and
-    // must prevent the embedded buffer from consuming subsequent HTML.
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      result[tag][index] = next;
-      if (close.test(lines[index])) {
-        next = index;
-      }
-    }
-  }
-  return result;
 }
 
 export function extractMustachePlaceholders(
@@ -400,22 +403,9 @@ function cloneDelimiters(delimiters: Delimiters): Delimiters {
   return { open: delimiters.open, close: delimiters.close };
 }
 
-function hasUnclosedSection(source: string): boolean {
-  const delimiters = createDefaultDelimiters();
+function hasUnclosedSection(tokens: TemplateToken[]): boolean {
   const stack: string[] = [];
-  let position = 0;
-
-  while (position < source.length) {
-    const tokenStart = findNextTokenStart(source, position, delimiters);
-    if (tokenStart === -1) {
-      break;
-    }
-
-    const token = parseTemplateToken(source, tokenStart, delimiters);
-    if (!token) {
-      break;
-    }
-
+  for (const token of tokens) {
     if (token.kind === 'sectionStart' && token.name) {
       stack.push(token.name);
     } else if (token.kind === 'sectionEnd' && token.name) {
@@ -423,48 +413,39 @@ function hasUnclosedSection(source: string): boolean {
       if (last === token.name) {
         stack.pop();
       }
-    } else if (token.kind === 'delimiter' && token.nextOpen && token.nextClose) {
-      delimiters.open = token.nextOpen;
-      delimiters.close = token.nextClose;
     }
-
-    position = token.end > tokenStart ? token.end : tokenStart + token.open.length;
   }
 
   return stack.length > 0;
 }
 
-function normalizeMustacheInText(text: string, delimiters: Delimiters): { text: string; tokens: TemplateToken[] } {
+function scanTemplateTokens(text: string, delimiters: Delimiters): { tokens: TemplateToken[]; complete: boolean } {
   const tokens: TemplateToken[] = [];
-  const parts: string[] = [];
   let position = 0;
-
   while (position < text.length) {
     const tokenStart = findNextTokenStart(text, position, delimiters);
-
-    if (tokenStart === -1) {
-      parts.push(text.slice(position));
-      break;
-    }
-
+    if (tokenStart === -1) break;
     const token = parseTemplateToken(text, tokenStart, delimiters);
-    if (!token) {
-      parts.push(text.slice(position));
-      break;
-    }
-
-    parts.push(text.slice(position, tokenStart));
-    parts.push(printTemplateToken(token));
+    if (!token) return { tokens, complete: false };
     tokens.push(token);
-
     if (token.kind === 'delimiter' && token.nextOpen && token.nextClose) {
       delimiters.open = token.nextOpen;
       delimiters.close = token.nextClose;
     }
-
     position = token.end;
   }
+  return { tokens, complete: true };
+}
 
+function normalizeMustacheInText(text: string, delimiters: Delimiters): { text: string; tokens: TemplateToken[] } {
+  const { tokens } = scanTemplateTokens(text, delimiters);
+  const parts: string[] = [];
+  let position = 0;
+  for (const token of tokens) {
+    parts.push(text.slice(position, token.start), printTemplateToken(token));
+    position = token.end;
+  }
+  parts.push(text.slice(position));
   return { text: parts.join(''), tokens };
 }
 
@@ -818,4 +799,3 @@ function normalizeCommentValue(value: string): string {
     .map((line, index) => (index === 0 ? line.trim() : line.trimStart().replace(/[ \t]+$/g, '')))
     .join('\n');
 }
-

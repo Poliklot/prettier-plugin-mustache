@@ -105,19 +105,19 @@ test('still wraps a line that is genuinely too long once restored', async () => 
 test('does not run embedded formatting for non-JavaScript <script type="...">', async () => {
   const source = template(['<script type="application/json">', '{"a": 1, "b": {{value}}}', '</script>']);
 
-  const expected = template(['<script type="application/json">', '  {"a": 1, "b": {{ value }}}', '</script>']);
+  const expected = source; // Unsupported bodies are now preserved, not flat-indented.
 
   await assertFormats(source, expected);
 });
 
-test('never substitutes section/comment/partial tags - falls back to flat formatting instead', async () => {
+test('never substitutes section/comment/partial tags - preserves their source instead', async () => {
   // {{#Dark}}/{{/Dark}} are structural, not a value - swapping them for a
   // placeholder would change what the braces around them mean, so this
-  // should always take the flat fallback rather than gamble on babel
+  // should always take the source-preserving fallback rather than gamble on babel
   // accepting the substituted text.
   const source = template(['<script>', '{{#Dark}}', 'var isDark = true;', '{{/Dark}}', '</script>']);
 
-  const expected = template(['<script>', '  {{#Dark}}', '  var isDark = true;', '  {{/Dark}}', '</script>']);
+  const expected = source;
 
   await assertFormats(source, expected);
 });
@@ -134,7 +134,7 @@ test('leaves empty inlined <script>/<style> tags (no body) untouched', async () 
 test('does not format a <script src="..."> body (browsers ignore it anyway)', async () => {
   const source = template(['<script src="app.js">', 'this is not actually run', '</script>']);
 
-  const expected = template(['<script src="app.js">', '  this is not actually run', '</script>']);
+  const expected = source;
 
   await assertFormats(source, expected);
 });
@@ -142,16 +142,16 @@ test('does not format a <script src="..."> body (browsers ignore it anyway)', as
 test('respects embeddedLanguageFormatting: "off"', async () => {
   const source = template(['<script>', 'var x = {a: 1};', '</script>']);
 
-  const expected = template(['<script>', '  var x = {a: 1};', '</script>']);
+  const expected = source;
 
   assert.equal(await format(source, { embeddedLanguageFormatting: 'off' }), expected);
 });
 
-test('flushes an unterminated <script> with the flat fallback instead of dropping it', async () => {
+test('preserves an unterminated <script> instead of dropping it', async () => {
   const source = template(['<div>', '<script>', 'doSomething();']);
 
   const formatted = await format(source);
-  assert.ok(formatted.includes('doSomething();'));
+  assert.equal(formatted.slice(formatted.indexOf('<script>')), source.slice(source.indexOf('<script>')));
 });
 
 test('does not compound indentation on a multi-line block comment across repeated passes', async () => {
