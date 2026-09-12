@@ -22,6 +22,12 @@
 * Discover ranged raw elements with child body nodes, including multiline opening
   tags. Protect comments, whitespace-sensitive containers, SVG/MathML fragments,
   ignored raw elements and script's HTML escaped/double-escaped forms.
+* Distinguish foreign-element self-closing flags from attribute-value slashes,
+  preserve EOF inside unfinished end-tag attributes, and avoid embedding apparent
+  script/style tags inside declarations or processing instructions.
+* Forward the same HTML/source-type context as Prettier's HTML printer: preserve
+  escaped closing tags in nested HTML templates and classic-script `await`
+  identifiers instead of reinterpreting them as module expressions.
 
 ### Compatibility
 

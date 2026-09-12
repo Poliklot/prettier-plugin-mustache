@@ -72,6 +72,36 @@ test('the plugin never renders embedded Docs privately', async () => {
   }
 });
 
+for (const body of [
+  String.raw`const result=html\`<script><\/script>\`;`.replaceAll('\\`', '`'),
+  String.raw`const result=/* HTML */ \`<script>const x=1;<\/script>\`;`.replaceAll('\\`', '`'),
+]) {
+  test(`nested HTML embedding cannot introduce an outer script close: ${body}`, async () => {
+    const source = `<script>\n${body}\n</script>\n`;
+    for (const printWidth of [20, 80]) {
+      const output = await stable(source, { printWidth });
+      assert.equal(output, await prettier.format(source, { parser: 'html', printWidth }));
+      assert.equal([...output.matchAll(/<\/script[\t\n\f\r />]/gi)].length, 1);
+      assert.ok(output.includes('<\\/script>'));
+    }
+  });
+}
+
+for (const attrs of ['', ' type="module"', ' type="text/babel" data-type="module"']) {
+  test(`embedded JS keeps the native HTML source type: ${attrs || 'classic script'}`, async () => {
+    const source = `<script${attrs}>\nawait\n("{{value}}")\n</script>\n`;
+    const output = await stable(source);
+    const expected = await prettier.format(source.replace('{{value}}', '{{ value }}'), { parser: 'html' });
+    assert.equal(output, expected);
+    if (!attrs) {
+      const body = mustache.render(output.slice(output.indexOf('>') + 1, output.lastIndexOf('</script>')), { value: 'hello' });
+      const received = [];
+      vm.runInNewContext(body, { await: (value) => received.push(value) }, { timeout: 1000 });
+      assert.deepEqual(received, ['hello']);
+    }
+  });
+}
+
 const marker = 'm0_0-xz';
 const replacements = () => new Map([[marker, '{{ value }}']]);
 const token = `"${marker}"`;

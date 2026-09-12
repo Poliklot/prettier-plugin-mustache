@@ -14,6 +14,11 @@ Architectural follow-up to [issue #25](https://github.com/Poliklot/prettier-plug
    containers and foreign fragments are opaque; explicit nested containers are
    balanced. This follows the relevant [HTML tokenization rules](https://html.spec.whatwg.org/multipage/parsing.html#script-data-state),
    not the complete browser tree-building/repair algorithm.
+   Tag boundaries distinguish actual self-closing flags from slashes in unquoted
+   values; EOF in a quoted attribute is not a completed tag. Apparent tags inside
+   markup declarations (through `>`) and named processing instructions (through
+   `?>` or EOF) are excluded from discovery, without claiming a full instruction
+   parser or changing ordinary outer-line formatting of PHP/XML templates.
 3. `RawTextElement` owns its original opening tag, closing tag and a child
    `RawTextBody`. Body ranges cover **every character** between the tags, including
    boundary newlines and closing-tag indentation. Multiline opening tags retain
@@ -24,6 +29,11 @@ Architectural follow-up to [issue #25](https://github.com/Poliklot/prettier-plug
    eligible raw-body nodes; the root does not embed its whole source. The native
    `textToDoc()` call inherits options and caller plugin ordering. Independent
    Babel AST validation does not replace the configured parser or preprocessing.
+   The adapter forwards Prettier's internal `__embeddedInHtml` and
+   `__babelSourceType` context flags, as its own HTML printer does. These are
+   explicit, version-tested compatibility dependencies, not public user options:
+   omitting them can unescape nested `</script>` tags or reinterpret a classic
+   script's `await` identifier as module syntax. No private renderer is used.
 5. `print()` is synchronous. It combines child Docs via `path.map()`, using
    `indent` and real `hardline` boundaries. Literal lines, groups, alternative
    layouts and line suffixes stay in the Doc until Prettier renders the document.
@@ -106,7 +116,8 @@ validate arbitrary transformations made by a caller's own parser/printer.
   delimiter transitions, failures and all EOL modes. Boundary regressions cover
   multiline/quoted attributes, comments, pre/textarea/foreign containers, inline
   and malformed closes, EOF preservation, ignore comments and overlapping HTML
-  script escape transitions.
+  script escape transitions. Additional regressions cover unfinished end-tag
+  attributes, foreign-container self-closing flags, declarations and instructions.
 - Stress tests cover 2000 substitutions, 300 raw bodies, and concurrent calls.
 
 Run the usual checks:

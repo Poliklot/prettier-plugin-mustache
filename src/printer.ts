@@ -1,7 +1,7 @@
 import { doc } from 'prettier';
 import type { AstPath, Doc, Printer } from 'prettier';
 import { formatEmbeddedDoc } from './embedded';
-import { discoverSource, extractMustachePlaceholders, resolveEmbeddedParser } from './source';
+import { discoverSource, extractMustachePlaceholders, resolveEmbeddedLanguage } from './source';
 import type { Node, RawTextElement, SourceSegment } from './types';
 
 const { hardline, indent, join, literalline } = doc.builders;
@@ -39,13 +39,13 @@ export const printer: Printer<Node> = {
   embed(path, options) {
     const node = path.node;
     if (node.type !== 'RawTextBody' || !node.text.trim()) return null;
-    const parser = resolveEmbeddedParser(node.tag, node.attrsText);
-    if (!parser) return null;
+    const language = resolveEmbeddedLanguage(node.tag, node.attrsText);
+    if (!language) return null;
     const extracted = extractMustachePlaceholders(node.text, node.delimiters);
     if (!extracted) return null;
 
     return async (textToDoc) => {
-      const contents = await formatEmbeddedDoc(extracted.text, extracted.restore, parser, options, textToDoc);
+      const contents = await formatEmbeddedDoc(extracted.text, extracted.restore, language, options, textToDoc);
       // This hardline is the actual opening-tag/body boundary, not a sentinel
       // for a private renderer. Literal lines and suffix comments remain Docs.
       return contents === null ? printFallback(node) : [

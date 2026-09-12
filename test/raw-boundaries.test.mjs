@@ -164,3 +164,75 @@ for (const attrs of [' language=JavaScript', ' language=vbscript type=module', '
     assert.equal(await stable(source), `<script${attrs}>\n  const x = { a: 1 };\n</script>\n`);
   });
 }
+
+for (const tag of ['script', 'style', 'textarea', 'title', 'pre', 'svg', 'math']) {
+  test(`EOF inside a quoted ${tag} end-tag attribute is not a completed close`, async () => {
+    for (const quote of ['"', "'"]) {
+      const source = `<${tag}>\n  literal  \n</${tag} data=${quote}>`;
+      const [region] = discoverProtectedRegions(source, []);
+      assert.equal(region.closeStart, undefined);
+      assert.equal(region.terminal, true);
+      assert.equal(await stable(source), source);
+    }
+  });
+}
+
+for (const tag of ['svg', 'math']) {
+  for (const attrs of [' data=value/', ' data=value/ ', ' / ']) {
+    test(`a slash is not automatically a ${tag} self-closing flag: ${attrs}`, async () => {
+      const opaque = `<${tag}${attrs}>\n<script>\nconst x=1;\n</script>\n</${tag}>`;
+      const source = `${opaque}\n<script>\nconst y=2;\n</script>\n`;
+      const regions = discoverProtectedRegions(source, []);
+      assert.equal(regions.length, 2);
+      assert.equal(regions[0].end, opaque.length);
+      assert.equal(await stable(source), `${opaque}\n<script>\n  const y = 2;\n</script>\n`);
+    });
+  }
+
+  test(`nested ${tag} containers distinguish value slashes from self-closing flags`, async () => {
+    const opaque = `<${tag}>\n<${tag} data=value/>\n</${tag}>\n<script>\nconst x=1;\n</script>\n</${tag}>`;
+    assert.equal(discoverProtectedRegions(opaque, [])[0].end, opaque.length);
+    assert.equal(await stable(`${opaque}\n`), `${opaque}\n`);
+  });
+
+  test(`actual ${tag} self-closing flags still allow subsequent embedding`, async () => {
+    for (const attrs of [' data=value /', ' data="value"/', ' data/']) {
+      const source = `<${tag}${attrs}>\n<script>\nconst x=1;\n</script>\n`;
+      assert.equal(await stable(source), source.replace('const x=1;', '  const x = 1;'));
+    }
+  });
+}
+
+for (const declaration of ['<!DOCTYPE html PUBLIC "', '<!unknown ', '<![CDATA[']) {
+  test(`does not embed a fake script opening inside a markup declaration: ${declaration}`, async () => {
+    const source = `${declaration}\n<script>\nconst x=1;\n</script>\n<script>\nconst y=2;\n</script>\n`;
+    const regions = discoverProtectedRegions(source, []);
+    assert.equal(regions.filter((region) => region.embeddable).length, 1);
+    const output = await stable(source);
+    // Ordinary outer indentation remains allowed, but the apparent JS is text
+    // and must not be parsed/reformatted as a script body.
+    assert.match(output, /\n *const x=1;\n/);
+    assert.ok(output.includes('  const y = 2;'));
+  });
+}
+
+test('processing instructions exclude fake raw tags through their terminator or EOF', async () => {
+  const instruction = '<?target\n<script>\nconst x=1;\n</script>\n?>';
+  const source = `${instruction}\n<script>\nconst y=2;\n</script>\n`;
+  const output = await stable(source);
+  assert.equal(discoverProtectedRegions(source, []).length, 1);
+  assert.ok(output.includes('const x=1;'));
+  assert.ok(output.includes('  const y = 2;'));
+  const unfinished = instruction.slice(0, -2) + '  ';
+  assert.equal(discoverProtectedRegions(unfinished, []).length, 0);
+  assert.ok((await stable(unfinished)).includes('const x=1;'));
+});
+
+test('instruction discovery does not disable ordinary non-HTML Mustache formatting', async () => {
+  assert.equal(await stable('<?php\n$value="{{name}}";\n'), '<?php\n$value="{{ name }}";\n');
+  for (const generic of ['List<?>', 'List<? extends T>']) {
+    const source = `${generic}\n<script>\nconst x=1;\n</script>\n`;
+    assert.equal(discoverProtectedRegions(source, []).length, 1);
+    assert.ok((await stable(source)).includes('const x = 1;'));
+  }
+});

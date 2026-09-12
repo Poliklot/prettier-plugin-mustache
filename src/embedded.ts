@@ -1,6 +1,7 @@
 import type { Doc, Options, ParserOptions } from 'prettier';
 import { parsers as babelParsers } from 'prettier/plugins/babel';
 import { restorePlaceholderDoc } from './placeholder-doc';
+import type { EmbeddedLanguage } from './source';
 
 export type TextToDoc = (text: string, options: Options) => Promise<Doc>;
 
@@ -38,11 +39,21 @@ function placeholdersAreStrings(ast: unknown, placeholders: Map<string, string>)
 export async function formatEmbeddedDoc(
   text: string,
   restore: Map<string, string>,
-  parser: 'babel' | 'css',
+  language: EmbeddedLanguage,
   options: Options,
   textToDoc: TextToDoc,
 ): Promise<Doc | null> {
   try {
+    const { parser } = language;
+    // Mirror Prettier's HTML embed context, not just its language parser. These
+    // internal flags are a version-tested compatibility dependency (3.0+): the
+    // first preserves escaped </script> in nested HTML templates; the second
+    // keeps classic-script identifiers such as `await` from becoming module
+    // expressions. They must reach both validation and the delegated parser.
+    const embeddedOptions: Options & { __embeddedInHtml: boolean; __babelSourceType?: 'script' | 'module' } = {
+      parser, __embeddedInHtml: true,
+      ...(language.parser === 'babel' ? { __babelSourceType: language.sourceType } : {}),
+    };
     // CSS escapes can interact with an unknown value across the substitution
     // boundary. Unlike plain identifiers, they are not safe opaque markers.
     if (parser === 'css' && restore.size > 0 && text.includes('\\')) {
@@ -54,7 +65,7 @@ export async function formatEmbeddedDoc(
       // embed() types options as partial, but Prettier supplies resolved values.
       const ast = await babelParsers.babel.parse(text, {
         ...options,
-        parser: 'babel',
+        ...embeddedOptions,
         originalText: text,
         locStart: babelParsers.babel.locStart,
         locEnd: babelParsers.babel.locEnd,
@@ -66,7 +77,7 @@ export async function formatEmbeddedDoc(
 
     // textToDoc inherits the resolved user options, but resets parent source
     // ranges/cursor state. Do not call format() with a hand-picked option list.
-    const bodyDoc = await textToDoc(text, { parser });
+    const bodyDoc = await textToDoc(text, embeddedOptions);
     return restorePlaceholderDoc(bodyDoc, restore);
   } catch {
     return null;

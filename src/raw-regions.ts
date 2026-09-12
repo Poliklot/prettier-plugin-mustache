@@ -29,9 +29,9 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
 
   // Quoting is meaningful after '='. Quotes in an unquoted value are not HTML
   // string delimiters. Template tags inside attributes are indivisible source.
-  function tagEnd(position: number): number {
+  function tagEnd(position: number): { end: number; selfClosing: boolean } | undefined {
     let quote: string | undefined;
-    let state: 'beforeName' | 'name' | 'afterName' | 'beforeValue' | 'unquoted' | 'afterValue' = 'beforeName';
+    let state: 'beforeName' | 'name' | 'afterName' | 'beforeValue' | 'unquoted' | 'afterValue' | 'selfClosing' = 'beforeName';
     for (let index = position; index < source.length; index += 1) {
       const end = templateEnd(index);
       if (end > index) {
@@ -43,7 +43,7 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
       if (quote) {
         if (char === quote) { quote = undefined; state = 'afterValue'; }
       } else if (char === '>') {
-        return index + 1;
+        return { end: index + 1, selfClosing: state === 'selfClosing' };
       } else {
         switch (state) {
           case 'beforeValue':
@@ -57,18 +57,20 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
           case 'name':
           case 'afterName':
             if (char === '=') state = 'beforeValue';
-            else if (char === '/') state = 'beforeName';
+            else if (char === '/') state = 'selfClosing';
             else if (space.test(char)) state = 'afterName';
             else state = 'name';
             break;
           case 'beforeName':
           case 'afterValue':
-            state = space.test(char) || char === '/' ? 'beforeName' : 'name';
+          case 'selfClosing':
+            state = char === '/' ? 'selfClosing' : space.test(char) ? 'beforeName' : 'name';
             break;
         }
       }
     }
-    return source.length;
+    // EOF is not a completed tag, even when its last character is a quoted '>'.
+    return undefined;
   }
 
   function rawClose(tag: string, start: number): { start: number; end: number; escaped: boolean } | undefined {
@@ -92,9 +94,9 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
         if (token === '<!--') candidates.lastIndex = match.index + 2;
       }
       if (token === `</${tag}`) {
-        const end = tagEnd(match.index + token.length);
-        if (source[end - 1] !== '>') return undefined;
-        return { start: match.index, end, escaped };
+        const close = tagEnd(match.index + token.length);
+        if (!close) return undefined;
+        return { start: match.index, end: close.end, escaped };
       }
     }
     return undefined;
@@ -105,6 +107,21 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
     close.lastIndex = start + 4;
     const match = close.exec(source);
     return match ? match.index + match[0].length : undefined;
+  }
+
+  function declarationEnd(start: number): number | undefined {
+    // HTML declarations (including malformed/quoted doctypes) end at the first
+    // '>'. Processing instructions are conservatively opaque until '?>'/EOF;
+    // never treat their apparent tag names as embeddable elements.
+    const terminator = source.startsWith('<?', start) ? '?>' : '>';
+    const close = source.indexOf(terminator, start + 2);
+    return close < 0 ? undefined : close + terminator.length;
+  }
+
+  function isDeclaration(start: number): boolean {
+    // Require a PI target: `List<?>` / `List<? extends T>` in non-HTML Mustache
+    // templates must not suppress discovery in the rest of the document.
+    return source.startsWith('<!', start) || /^<\?[A-Za-z][\w:.-]*(?=[\t\n\f\r ]|\?>)/.test(source.slice(start));
   }
 
   // Unlike raw text, pre/foreign containers can contain nested tags and quoted
@@ -124,14 +141,20 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
         position = close < 0 ? source.length : close + 3;
         continue;
       }
+      if (isDeclaration(start)) {
+        position = declarationEnd(start) ?? source.length;
+        continue;
+      }
       const name = source.slice(start).match(/^<\/?([A-Za-z][^\t\n\f\r />]*)/);
       if (!name) { position = start + 1; continue; }
       const nested = name[1].toLowerCase();
-      position = tagEnd(start + name[0].length);
+      const boundary = tagEnd(start + name[0].length);
+      if (!boundary) return undefined;
+      position = boundary.end;
       if (nested === tag) {
         if (source[start + 1] === '/') {
           if (--depth === 0) return { start, end: position, escaped: false };
-        } else if (tag === 'pre' || !/\/\s*>$/.test(source.slice(start, position))) depth += 1;
+        } else if (tag === 'pre' || !boundary.selfClosing) depth += 1;
       } else if (source[start + 1] !== '/' && protectedTags.has(nested) && !['pre', 'svg', 'math'].includes(nested)) {
         position = rawClose(nested, position)?.end ?? source.length;
       }
@@ -151,14 +174,22 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
       regions.push({ start, end: position, terminal: end === undefined });
       continue;
     }
+    if (isDeclaration(start)) {
+      // Exclude apparent tags from discovery without introducing a new
+      // verbatim policy for PHP/XML/other non-HTML Mustache source. Its ordinary
+      // outer-line formatting remains unchanged, unlike protected raw bodies.
+      position = declarationEnd(start) ?? source.length;
+      continue;
+    }
     const name = source.slice(start).match(/^<\/?([A-Za-z][^\t\n\f\r />]*)/);
     if (!name) { position = start + 1; continue; }
     const tag = name[1].toLowerCase();
-    const openEnd = tagEnd(start + name[0].length);
+    const opening = tagEnd(start + name[0].length);
+    const openEnd = opening?.end ?? source.length;
     position = openEnd;
     if (source[start + 1] === '/' || !protectedTags.has(tag)) continue;
     const attrsText = source.slice(start + name[0].length, openEnd - 1);
-    const close = (tag === 'svg' || tag === 'math') && /\/\s*$/.test(attrsText)
+    const close = (tag === 'svg' || tag === 'math') && opening?.selfClosing
       ? { start: openEnd, end: openEnd, escaped: false }
       : tag === 'plaintext' ? undefined : ['pre', 'svg', 'math'].includes(tag)
         ? containerClose(tag, openEnd) : rawClose(tag, openEnd);
@@ -166,7 +197,7 @@ export function discoverProtectedRegions(source: string, templateSpans: { start:
     regions.push({
       start, end: position, tag, openEnd, closeStart: close?.start, attrsText, terminal: !close,
       embeddable: (tag === 'script' || tag === 'style') && Boolean(close) &&
-        !close?.escaped && !/\/\s*$/.test(attrsText) &&
+        !close?.escaped && !opening?.selfClosing &&
         new RegExp(`^</${tag}[\\t\\n\\f\\r ]*>$`, 'i').test(source.slice(close?.start, close?.end)),
     });
   }

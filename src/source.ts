@@ -9,6 +9,10 @@ interface Delimiters {
 
 type RawTextTag = 'script' | 'style';
 
+export type EmbeddedLanguage =
+  | { parser: 'babel'; sourceType: 'script' | 'module' }
+  | { parser: 'css' };
+
 // Script types whose body is still plain JavaScript. Anything else (JSON
 // islands, other templating languages sharing the file, etc.) is left to the
 // source-preserving fallback rather than risking a confidently wrong
@@ -267,7 +271,7 @@ export function discoverSource(source: string): SourceSegment[] {
   return output;
 }
 
-export function resolveEmbeddedParser(tag: RawTextTag, attrsText: string): 'babel' | 'css' | null {
+export function resolveEmbeddedLanguage(tag: RawTextTag, attrsText: string): EmbeddedLanguage | null {
   const attributes = parseRawTextAttributes(attrsText);
   if (!attributes) {
     return null;
@@ -286,12 +290,14 @@ export function resolveEmbeddedParser(tag: RawTextTag, attrsText: string): 'babe
   // https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element
   if (rawType !== undefined && rawType !== '' && type === '') return null;
   if (tag === 'style') {
-    return (!type || type === 'text/css') && (!lang || lang === 'css') ? 'css' : null;
+    return (!type || type === 'text/css') && (!lang || lang === 'css') ? { parser: 'css' } : null;
   }
   if (attributes.has('src') || (lang && !['js', 'javascript'].includes(lang))) {
     return null;
   }
-  return JS_SCRIPT_TYPES.has(type) ? 'babel' : null;
+  if (!JS_SCRIPT_TYPES.has(type)) return null;
+  return { parser: 'babel', sourceType: type === 'module' ||
+    (type === 'text/babel' && attributes.get('data-type') === 'module') ? 'module' : 'script' };
 }
 
 function parseRawTextAttributes(text: string): Map<string, string> | null {
@@ -361,7 +367,7 @@ export function extractMustachePlaceholders(
     }
     const token = parseTemplateToken(text, start, delimiters);
     // Structural tags and unescaped fragments can alter the surrounding
-    // grammar. Keep them on the legacy path rather than guessing their value.
+    // grammar. Keep their original source rather than guessing their value.
     if (!token || token.kind !== 'mustache' || token.triple || token.ampersand) {
       return null;
     }
