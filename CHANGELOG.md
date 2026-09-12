@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.2.1](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.2.0...prettier-plugin-mustache-v0.2.1) (2026-09-12)
 
 ### Refactoring
 
@@ -38,9 +38,6 @@
   precedence, Node 18+ and Prettier 3.0+ minimums; no dependencies were added.
 * Characterize cursor mapping and the existing partial-range no-op; no new
   syntax-aware editor range-formatting support is claimed.
-
-## [0.2.1](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.2.0...prettier-plugin-mustache-v0.2.1) (2026-09-12)
-
 
 ### Bug Fixes
 
