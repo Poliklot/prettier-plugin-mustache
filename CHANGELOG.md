@@ -9,6 +9,13 @@
 * Consume shared placeholder/Doc validation and HTML context from `template-format-core`, retaining this plugin's own AST and dialect.
 * See `docs/shared-embedding.md` and Poliklot/template-format-core#2 for the coordinated dependency and release gates.
 
+## [0.2.2](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.2.1...prettier-plugin-mustache-v0.2.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* **deps:** use published template-format-core 0.2.0 ([c6046c2](https://github.com/Poliklot/prettier-plugin-mustache/commit/c6046c2fdc258716300baca18f989dd3b4689272))
+
 ## [0.2.1](https://github.com/Poliklot/prettier-plugin-mustache/compare/prettier-plugin-mustache-v0.2.0...prettier-plugin-mustache-v0.2.1) (2026-09-12)
 
 ### Refactoring
