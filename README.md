@@ -420,3 +420,7 @@ npm run corpus:oss
 `npm run corpus:oss` clones and checks large public Mustache template corpora from Mustache.js, OpenAPI Generator, and Swagger Codegen. See [OSS corpus notes](docs/OSS_CORPUS.md).
 
 CI runs build, tests, fuzz, pack validation, and install smoke checks on Node 18, 20, and 22.
+
+## Shared embedding work
+
+See [shared embedding architecture and cross-repository dependencies](docs/shared-embedding.md). This source work depends on [the core tracking issue](https://github.com/Poliklot/template-format-core/issues/2).
