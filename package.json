@@ -54,9 +54,9 @@
     "template-format-core": "^0.2.0"
   },
   "devDependencies": {
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.3",
     "mustache": "^4.2.0",
-    "prettier": "^3.9.6",
+    "prettier": "^3.9.9",
     "typescript": "^7.0.2"
   },
   "peerDependencies": {
