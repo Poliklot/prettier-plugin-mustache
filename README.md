@@ -424,3 +424,18 @@ CI runs build, tests, fuzz, pack validation, and install smoke checks on Node 18
 ## Shared embedding work
 
 See [shared embedding architecture and cross-repository dependencies](docs/shared-embedding.md). This source work depends on [the core tracking issue](https://github.com/Poliklot/template-format-core/issues/2).
+
+## Semantic preservation
+
+Syntax formatting preserves literal values, Unicode spaces and source-adjacent
+inline boundaries. Plain-text templates retain their line breaks and indentation;
+HTML wrapping is allowed only at existing collapsible whitespace. `printWidth` is
+not permission to insert whitespace into an unbreakable text flow.
+
+Mustache names are treated as complete keys, not Handlebars expressions. Positive
+section bodies are retained verbatim because the runtime context may supply a
+lambda that consumes the original source. This deliberately limits indentation,
+syntax normalization and embedded-language formatting inside those bodies.
+
+Shared semantic-preservation helpers are provided by `template-format-core` 0.2.1
+or newer. Regression tests compare template execution before and after formatting.

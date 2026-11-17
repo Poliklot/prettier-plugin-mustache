@@ -1,5 +1,5 @@
 import { createPlaceholderPlan } from 'template-format-core/embedding/placeholders';
-import { isTemplateExpressionQuoteStart, parseTemplateExpression, voidElements, withRange } from 'template-format-core';
+import { voidElements, trimHtmlWhitespace, withRange } from 'template-format-core';
 import { discoverProtectedRegions } from './raw-regions';
 import type { SourceLine, SourceSegment } from './types';
 
@@ -31,6 +31,8 @@ interface TemplateToken {
   nextClose?: string;
 }
 
+type SourceProtectedRegion = ReturnType<typeof discoverProtectedRegions>[number] & { literal?: boolean };
+
 interface PendingOpenTag {
   tag: string;
   baseDepth: number;
@@ -45,7 +47,7 @@ interface PendingAttributeValue {
 export function discoverSource(source: string): SourceSegment[] {
   const normalized = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
-  if (normalized.trim().length === 0) {
+  if (normalized.length === 0) {
     return [];
   }
 
@@ -56,11 +58,45 @@ export function discoverSource(source: string): SourceSegment[] {
 
   const withoutFinalNewline = normalized.replace(/\n+$/g, '');
   const lines = withoutFinalNewline.split('\n');
-  const protectedRegions = discoverProtectedRegions(normalized, scanned.tokens);
+  const candidates: SourceProtectedRegion[] = [
+    ...discoverProtectedRegions(normalized, scanned.tokens),
+    ...callableSectionRegions(scanned.tokens),
+    ...scanned.tokens.filter(token => {
+      if (token.kind !== 'partial') return false;
+      const lineStart = normalized.lastIndexOf('\n', token.start - 1) + 1;
+      const nextLine = normalized.indexOf('\n', token.end);
+      return /^[\t ]*$/.test(normalized.slice(lineStart, token.start)) &&
+        /^[\t ]*$/.test(normalized.slice(token.end, nextLine < 0 ? normalized.length : nextLine));
+    }).map(token => ({ start: token.start, end: token.end, literal: true })),
+  ].sort((a, b) => a.start - b.start || b.end - a.end);
+  const protectedRegions: SourceProtectedRegion[] = [];
+  for (const region of candidates) {
+    const previous = protectedRegions[protectedRegions.length - 1];
+    if (previous && region.start < previous.end) {
+      // An overlapping lambda/raw boundary is opaque, never an embed target.
+      previous.end = Math.max(previous.end, region.end);
+      previous.embeddable = false;
+      previous.literal ||= region.literal;
+      previous.terminal ||= region.terminal;
+    } else protectedRegions.push({ ...region });
+  }
+  // Without HTML, every indentation character and line break is output data.
+  // Keep only the normal final-newline convention; do not run an HTML indenter.
+  let exterior = '';
+  let after = 0;
+  for (const token of scanned.tokens) {
+    exterior += normalized.slice(after, token.start);
+    after = token.end;
+  }
+  exterior += normalized.slice(after);
+  if (!/<(?:[A-Za-z][\w:-]*(?:[\t\n\f\r />])|!|\/)/.test(exterior)) {
+    const text = normalizeMustacheInText(normalized, createDefaultDelimiters()).text;
+    return [withRange({ type: 'VerbatimSource', text: text.endsWith('\n') ? text : text + '\n' }, 0, normalized.length)];
+  }
 
   if (lines.length === 1 && !protectedRegions.length) {
     const delimiters = createDefaultDelimiters();
-    const formatted = normalizeMustacheInText(lines[0].replace(/[ \t]+$/g, ''), delimiters).text.trimEnd();
+    const formatted = normalizeMustacheInText(lines[0], delimiters).text;
     return formatted.length > 0 ? [withRange({ type: 'SourceLine', text: formatted, depth: 0, leadingLine: false }, 0, lines[0].length)] : [];
   }
 
@@ -96,7 +132,7 @@ export function discoverSource(source: string): SourceSegment[] {
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const rawLine = lines[lineIndex];
-    const rawTrimmed = rawLine.trim();
+    const rawTrimmed = trimHtmlWhitespace(rawLine);
 
     const region = protectedRegions[regionIndex];
     if (region && lineAt(region.start) === lineIndex) {
@@ -146,8 +182,8 @@ export function discoverSource(source: string): SourceSegment[] {
         }).join('') + normalized.slice(previous, end);
         // The whitespace before a standalone protected opening is outside its
         // content. Keep normal outer indentation there, not inside raw text.
-        const canIndent = !normalized.slice(offsets[lineIndex], region.start).trim() ||
-          (!terminal && lineIndex === lastLine);
+        const canIndent = !region.literal && (!normalized.slice(offsets[lineIndex], region.start).trim() ||
+          (!terminal && lineIndex === lastLine));
         const depth = canIndent ? Math.max(0, state.depth - countLeadingHtmlCloseTags(exterior.trimStart())) : undefined;
         output.push(withRange({ type: 'OpaqueSource', text, leadingLine: output.length > 0, terminal, depth }, offsets[lineIndex], end));
         state.depth = Math.max(0, state.depth + getHtmlDepthDelta(exterior, 0));
@@ -163,7 +199,7 @@ export function discoverSource(source: string): SourceSegment[] {
 
     const lineStartDelimiters = cloneDelimiters(state.delimiters);
     const standaloneToken = parseStandaloneToken(rawTrimmed, lineStartDelimiters);
-    const normalizedLine = normalizeMustacheInText(rawTrimmed, state.delimiters).text.trim();
+    const normalizedLine = trimHtmlWhitespace(normalizeMustacheInText(rawTrimmed, state.delimiters).text);
 
     if (state.pendingAttributeValue) {
       if (standaloneToken?.kind === 'sectionEnd') {
@@ -335,12 +371,36 @@ function scanTemplateTokens(text: string, delimiters: Delimiters): { tokens: Tem
   return { tokens, complete: true };
 }
 
+function callableSectionRegions(tokens: TemplateToken[]): SourceProtectedRegion[] {
+  const stack: TemplateToken[] = [];
+  const regions: SourceProtectedRegion[] = [];
+  let callableDepth = 0;
+  for (const token of tokens) {
+    if (token.kind === 'sectionStart') {
+      stack.push(token);
+      if (token.sectionKind === 'section') callableDepth += 1;
+    }
+    else if (token.kind === 'sectionEnd' && stack[stack.length - 1]?.name === token.name) {
+      const opening = stack.pop()!;
+      if (opening.sectionKind === 'section' && --callableDepth === 0) {
+        regions.push({ start: opening.start, end: token.end, literal: true });
+      }
+    }
+  }
+  return regions;
+}
+
 function normalizeMustacheInText(text: string, delimiters: Delimiters): { text: string; tokens: TemplateToken[] } {
   const { tokens } = scanTemplateTokens(text, delimiters);
   const parts: string[] = [];
   let position = 0;
+  const regions = callableSectionRegions(tokens);
+  let regionIndex = 0;
   for (const token of tokens) {
-    parts.push(text.slice(position, token.start), printTemplateToken(token));
+    while (regions[regionIndex] && regions[regionIndex].end <= token.start) regionIndex += 1;
+    const region = regions[regionIndex];
+    const protectedToken = region !== undefined && token.start >= region.start && token.end <= region.end;
+    parts.push(text.slice(position, token.start), protectedToken ? token.raw : printTemplateToken(token));
     position = token.end;
   }
   parts.push(text.slice(position));
@@ -427,41 +487,7 @@ function parseTemplateToken(text: string, position: number, delimiters: Delimite
 }
 
 function findTemplateClose(text: string, position: number, close: string): number {
-  let quote: '"' | "'" | '`' | null = null;
-  let escaped = false;
-
-  for (let index = position; index < text.length; index += 1) {
-    const char = text[index];
-
-    if (quote) {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-
-      if (char === '\\') {
-        escaped = true;
-        continue;
-      }
-
-      if (char === quote) {
-        quote = null;
-      }
-
-      continue;
-    }
-
-    if ((char === '"' || char === "'" || char === '`') && isTemplateExpressionQuoteStart(text, index, position)) {
-      quote = char;
-      continue;
-    }
-
-    if (text.startsWith(close, index)) {
-      return index;
-    }
-  }
-
-  return -1;
+  return text.indexOf(close, position);
 }
 
 function getTemplateSectionKind(prefix: string): 'section' | 'inverted' | 'parent' | 'block' {
@@ -472,7 +498,7 @@ function getTemplateSectionKind(prefix: string): 'section' | 'inverted' | 'paren
 }
 
 function readTemplateName(expression: string): string {
-  return expression.trim().split(/\s+/)[0] ?? '';
+  return expression.trim();
 }
 
 function printTemplateToken(token: TemplateToken): string {
@@ -520,9 +546,7 @@ function printTemplateSectionOpen(token: TemplateToken): string {
 }
 
 function normalizeTemplateExpression(content: string): string {
-  const parsed = parseTemplateExpression(content);
-  const parts = [parsed.path, ...parsed.params, ...parsed.hash.map((pair) => `${pair.key}=${pair.value}`)].filter(Boolean);
-  return parts.join(' ');
+  return content.trim();
 }
 
 function isAttributeValueCloseLine(line: string, quote: '"' | "'"): boolean {

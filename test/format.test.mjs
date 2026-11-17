@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import prettier from 'prettier';
+import { preserveCallableSections } from './section-oracle.mjs';
 
 const plugin = await import('../dist/plugin.js');
+
+async function assertFormat(source, historical, options = {}) {
+  assert.equal(await format(source, options), preserveCallableSections(source, historical));
+}
 
 async function format(source, options = {}) {
   return prettier.format(source, {
@@ -25,35 +30,20 @@ test('infers parser for common Mustache file extensions', async () => {
   assert.equal(await formatByFilepath('{{name}}', 'view.mu'), '{{ name }}\n');
 });
 
-test('respects tabWidth and useTabs for multiline section indentation', async () => {
-  assert.equal(
-    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { tabWidth: 4 }),
-    '{{#items}}\n    <li>{{ name }}</li>\n{{/items}}\n',
-  );
+test('preserves possible lambda bodies regardless of tabWidth and useTabs', async () => {
+  await assertFormat('{{#items}}\n<li>{{name}}</li>\n{{/items}}', '{{#items}}\n    <li>{{ name }}</li>\n{{/items}}\n', { tabWidth: 4 });
 
-  assert.equal(
-    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { useTabs: true }),
-    '{{#items}}\n\t<li>{{ name }}</li>\n{{/items}}\n',
-  );
+  await assertFormat('{{#items}}\n<li>{{name}}</li>\n{{/items}}', '{{#items}}\n\t<li>{{ name }}</li>\n{{/items}}\n', { useTabs: true });
 });
 
 test('formats standalone comments, partials, and delimiter tags inside sections', async () => {
-  assert.equal(
-    await format('{{#names}}\n{{! comment}}\n{{> user}}\n{{/names}}', { tabWidth: 4 }),
-    '{{#names}}\n    {{! comment }}\n    {{> user }}\n{{/names}}\n',
-  );
+  await assertFormat('{{#names}}\n{{! comment}}\n{{> user}}\n{{/names}}', '{{#names}}\n    {{! comment }}\n    {{> user }}\n{{/names}}\n', { tabWidth: 4 });
 
-  assert.equal(
-    await format('{{#section}}\n{{=<% %>=}}\n<%name%>\n<%/section%>'),
-    '{{#section}}\n  {{= <% %> =}}\n  <% name %>\n<%/section%>\n',
-  );
+  await assertFormat('{{#section}}\n{{=<% %>=}}\n<%name%>\n<%/section%>', '{{#section}}\n  {{= <% %> =}}\n  <% name %>\n<%/section%>\n');
 });
 
 test('formats section keys that use Mustache-valid punctuation', async () => {
-  assert.equal(
-    await format('{{#person?}}\nHi {{name}}!\n{{/person?}}'),
-    '{{#person?}}\n  Hi {{ name }}!\n{{/person?}}\n',
-  );
+  await assertFormat('{{#person?}}\nHi {{name}}!\n{{/person?}}', '{{#person?}}\n  Hi {{ name }}!\n{{/person?}}\n');
 });
 
 test('formats interpolation, dotted names, implicit iterators, and unescaped variables', async () => {
@@ -64,17 +54,11 @@ test('formats interpolation, dotted names, implicit iterators, and unescaped var
 });
 
 test('preserves inline sections to avoid Mustache whitespace changes', async () => {
-  assert.equal(
-    await format('{{#items}}<li>{{name}}</li>{{/items}}'),
-    '{{#items}}<li>{{ name }}</li>{{/items}}\n',
-  );
+  await assertFormat('{{#items}}<li>{{name}}</li>{{/items}}', '{{#items}}<li>{{ name }}</li>{{/items}}\n');
 });
 
 test('formats multiline sections with nested tags', async () => {
-  assert.equal(
-    await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}'),
-    '{{#items}}\n  <li>{{ name }}</li>\n{{/items}}\n',
-  );
+  await assertFormat('{{#items}}\n<li>{{name}}</li>\n{{/items}}', '{{#items}}\n  <li>{{ name }}</li>\n{{/items}}\n');
 });
 
 test('formats inverted sections, comments, and partials', async () => {
@@ -94,7 +78,7 @@ test('formats multiline comments without crashing', async () => {
 test('formats parent templates and block overrides', async () => {
   assert.equal(
     await format('{{< layout}}\n{{$title}}Hi{{/title}}\n{{/layout}}'),
-    '{{< layout}}\n  {{$title}}Hi{{/title}}\n{{/layout}}\n',
+    '{{< layout}}\n{{$title}}Hi{{/title}}\n{{/layout}}\n',
   );
 });
 
@@ -111,16 +95,13 @@ test('formats delimiter changes, resets, and custom delimiters inside sections',
     '{{= <% %> =}}Hello <% name %> <%= {{ }} =%> {{ again }}\n',
   );
 
-  assert.equal(
-    await format('{{#section}}{{=<% %>=}}<%name%><%/section%>'),
-    '{{#section}}{{= <% %> =}}<% name %><%/section%>\n',
-  );
+  await assertFormat('{{#section}}{{=<% %>=}}<%name%><%/section%>', '{{#section}}{{= <% %> =}}<% name %><%/section%>\n');
 });
 
 test('preserves unmatched tags instead of throwing', async () => {
   // Unknown/unclosed source is now preserved including its original EOF.
-  assert.equal(await format('{{#items}}<li>{{name}}</li>'), '{{#items}}<li>{{name}}</li>');
-  assert.equal(await format('{{#items}}<li>{{name}}</li>  \n\n'), '{{#items}}<li>{{name}}</li>  \n\n');
+  await assertFormat('{{#items}}<li>{{name}}</li>', '{{#items}}<li>{{name}}</li>');
+  await assertFormat('{{#items}}<li>{{name}}</li>  \n\n', '{{#items}}<li>{{name}}</li>  \n\n');
   assert.equal(await format('{{/items}}'), '{{/items}}\n');
 });
 

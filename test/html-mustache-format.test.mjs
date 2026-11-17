@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import prettier from 'prettier';
+import { preserveCallableSections } from './section-oracle.mjs';
 
 const plugin = await import('../dist/plugin.js');
 
@@ -18,8 +19,9 @@ async function format(source, options = {}) {
 }
 
 async function assertFormats(source, expected, options = {}) {
-  assert.equal(await format(source, options), expected);
-  assert.equal(await format(expected, options), expected);
+  const reviewed = preserveCallableSections(source, expected);
+  assert.equal(await format(source, options), reviewed);
+  assert.equal(await format(reviewed, options), reviewed);
 }
 
 test('HTML+Mustache: preserves issue #5 mobile dropdown trigger indentation', async () => {
@@ -334,7 +336,7 @@ test('HTML+Mustache: keeps comments and partials aligned inside HTML containers'
     '<section class="dashboard">',
     '    {{! Header actions }}',
     '    <header>',
-    '        {{> core/action_menu }}',
+    '        {{> core/action_menu}}',
     '    </header>',
     '    {{#hasCards}}',
     '        {{> core/card_grid }}',

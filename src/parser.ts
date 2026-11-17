@@ -2,7 +2,6 @@ import {
   locEnd,
   locStart,
   normalizeInput,
-  parseTemplateExpression,
   withRange,
 } from 'template-format-core';
 import type {
@@ -197,7 +196,7 @@ function getSectionKind(prefix: string): SectionKind {
 }
 
 function readName(expression: string): string {
-  return expression.trim().split(/\s+/)[0] ?? '';
+  return expression.trim();
 }
 
 function pushText(nodes: Node[], text: string, start: number, end: number): void {
@@ -209,12 +208,8 @@ function pushText(nodes: Node[], text: string, start: number, end: number): void
 }
 
 function createExpression(content: string): { path: string; params: string[]; hash: Array<{ key: string; value: string }> } {
-  const parsed = parseTemplateExpression(content);
-  return {
-    path: parsed.path,
-    params: parsed.params,
-    hash: parsed.hash,
-  };
+  // Mustache has names, not Handlebars helper arguments or block params.
+  return { path: content.trim(), params: [], hash: [] };
 }
 
 function createMustache(token: Token): MustacheStatement {

@@ -51,11 +51,11 @@ const format = (source, options = {}) => prettier.format(source, { filepath: 'sa
 (async () => {
   assert.equal(
     await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { tabWidth: 4 }),
-    '{{#items}}\n    <li>{{ name }}</li>\n{{/items}}\n',
+    '{{#items}}\n<li>{{name}}</li>\n{{/items}}\n',
   );
   assert.equal(
     await format('{{#items}}\n<li>{{name}}</li>\n{{/items}}', { filepath: 'sample.mu', useTabs: true }),
-    '{{#items}}\n\t<li>{{ name }}</li>\n{{/items}}\n',
+    '{{#items}}\n<li>{{name}}</li>\n{{/items}}\n',
   );
   const fixtures = [
     [

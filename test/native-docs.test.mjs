@@ -6,6 +6,7 @@ import mustache from 'mustache';
 import prettier from 'prettier';
 import * as plugin from '../dist/plugin.js';
 import { parse } from '../dist/parser.js';
+import { preserveCallableSections } from './section-oracle.mjs';
 import { restorePlaceholderDoc } from '../dist/placeholder-doc.js';
 
 const b = prettier.doc.builders;
@@ -23,10 +24,12 @@ async function stable(source, options = {}) {
 
 // Recorded from the released 0.2.0 printer before refactoring, not regenerated
 // during tests. Keep that historical fixture intact. The explicitly reviewed
-// hardening delta replaces only fallback raw bodies with their original source;
-// every other byte of the old expected output remains the compatibility oracle.
+// hardening delta preserves fallback raw bodies, callable sections and literal
+// trailing spaces. Every other byte remains the historical compatibility oracle.
 const characterizations = JSON.parse(fs.readFileSync(new URL('./fixtures/native-doc-characterization.json', import.meta.url)));
 function reviewedRawSourceDelta(name, source, options, expected) {
+  if (name === 'single') return '  Hello {{ name }}  \n'; // Trailing literal spaces are data.
+  expected = preserveCallableSections(source, expected);
   if (name === 'unclosed') return source; // Do not trim unknown/unclosed source either.
   // These fixed fixtures have no greater-than signs in attributes. This helper
   // is an independent test oracle, not the implementation's boundary scanner.
@@ -37,6 +40,7 @@ function reviewedRawSourceDelta(name, source, options, expected) {
     const original = originals[index++];
     const preserve = options.embeddedLanguageFormatting === 'off' ||
       name === 'emptyRaw' || name === 'unsupported' ||
+      name === 'dynamic' ||
       (name === 'delimiters' && tag === 'script') || (name === 'closing' && index === 1);
     return preserve ? opening + original[3] + closing : whole;
   });

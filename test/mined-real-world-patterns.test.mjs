@@ -71,16 +71,16 @@ for (const pattern of patterns) {
   });
 }
 
-test('real-world patterns respect project indentation options', async () => {
+test('real-world callable section bodies stay source under indentation options', async () => {
   const source = '{{#operations}}\n{{#operation}}\n{{summary}}\n{{/operation}}\n{{/operations}}';
 
   assert.equal(
     await format(source, { tabWidth: 4 }),
-    '{{#operations}}\n    {{#operation}}\n        {{ summary }}\n    {{/operation}}\n{{/operations}}\n',
+    source + '\n',
   );
 
   assert.equal(
     await format(source, { useTabs: true }),
-    '{{#operations}}\n\t{{#operation}}\n\t\t{{ summary }}\n\t{{/operation}}\n{{/operations}}\n',
+    source + '\n',
   );
 });

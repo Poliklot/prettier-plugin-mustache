@@ -51,7 +51,7 @@
     "prepublishOnly": "node scripts/check-core-release.mjs && npm run check"
   },
   "dependencies": {
-    "template-format-core": "^0.2.0"
+    "template-format-core": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
